@@ -158,6 +158,12 @@ class WorkoutViewModel(
         }
     }
 
+    fun deleteSet(set: WorkoutSetEntity) {
+        viewModelScope.launch {
+            repository.deleteSet(set)
+        }
+    }
+
     fun finishCurrentWorkout() {
         val session = activeSession.value ?: return
         val sets = exerciseGroups.value.flatMap { it.sets }.filter { it.isCompleted }

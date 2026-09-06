@@ -21,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,7 +43,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,10 +57,13 @@ import com.baoji.fitness.core.theme.AppleGray4
 import com.baoji.fitness.core.theme.AppleGray5
 import com.baoji.fitness.core.theme.AppleGray6
 import com.baoji.fitness.core.theme.AppleHairline
+import com.baoji.fitness.core.theme.AppleSystemRed
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.ui.workout.components.RestTimerCapsule
+
+fun formatWeight(w: Double): String = if (w % 1.0 == 0.0) w.toInt().toString() else w.toString()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +82,7 @@ fun WorkoutScreen(
 
     var showAddExerciseSheet by remember { mutableStateOf(false) }
     var showSummaryDialog by remember { mutableStateOf(false) }
+    var activeEditingSet by remember { mutableStateOf<Pair<ExerciseEntity, WorkoutSetEntity>?>(null) }
 
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
     val totalVolume = completedSets.sumOf { it.weightKg * it.reps }.toInt()
@@ -220,7 +222,10 @@ fun WorkoutScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.toggleSetCompletion(it)
                     },
-                    onUpdateSet = { set, w, r -> viewModel.updateSet(set, w, r) },
+                    onOpenSetEditor = { set ->
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        activeEditingSet = Pair(group.exercise, set)
+                    },
                     onAddSet = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.addSet(group.exercise.id)
@@ -265,7 +270,7 @@ fun WorkoutScreen(
 
             // Bottom Spacing for Tab Bar and Rest Timer
             item {
-                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.height(110.dp))
             }
         }
 
@@ -292,6 +297,23 @@ fun WorkoutScreen(
                 onExerciseSelected = { exerciseId ->
                     viewModel.addExerciseToSession(exerciseId)
                     showAddExerciseSheet = false
+                }
+            )
+        }
+
+        // Quick Set Editor Bottom Sheet (Solves all typing & glitch issues in gym)
+        activeEditingSet?.let { (exercise, set) ->
+            QuickAdjustSetBottomSheet(
+                exerciseName = exercise.name,
+                set = set,
+                onDismiss = { activeEditingSet = null },
+                onSave = { updatedWeight, updatedReps, updatedType ->
+                    viewModel.updateSet(set.copy(setType = updatedType), updatedWeight, updatedReps)
+                    activeEditingSet = null
+                },
+                onDelete = {
+                    viewModel.deleteSet(set)
+                    activeEditingSet = null
                 }
             )
         }
@@ -348,7 +370,7 @@ private fun MetricItem(
 private fun ExerciseCard(
     group: ExerciseGroup,
     onToggleSet: (WorkoutSetEntity) -> Unit,
-    onUpdateSet: (WorkoutSetEntity, Double, Int) -> Unit,
+    onOpenSetEditor: (WorkoutSetEntity) -> Unit,
     onAddSet: () -> Unit
 ) {
     Column(
@@ -391,7 +413,7 @@ private fun ExerciseCard(
                     }
                 }
                 Text(
-                    text = "基准参考: ${group.exercise.personalRecordWeight} kg × ${group.exercise.personalRecordReps} · 估算1RM ${group.benchmark1RM} kg",
+                    text = "基准参考: ${formatWeight(group.exercise.personalRecordWeight)} kg × ${group.exercise.personalRecordReps} · 估算1RM ${formatWeight(group.benchmark1RM)} kg",
                     fontSize = 11.sp,
                     color = AppleTextSecondary,
                     modifier = Modifier.padding(top = 2.dp)
@@ -426,7 +448,7 @@ private fun ExerciseCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(text = "组", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
-            Text(text = "上周记录", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(2.2f), textAlign = TextAlign.Center)
+            Text(text = "上周记录", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(2.0f), textAlign = TextAlign.Center)
             Text(text = "重量(kg)", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.8f), textAlign = TextAlign.Center)
             Text(text = "次数", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
             Text(text = "完成", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
@@ -438,7 +460,7 @@ private fun ExerciseCard(
                 order = index + 1,
                 set = set,
                 onToggle = { onToggleSet(set) },
-                onUpdate = { w, r -> onUpdateSet(set, w, r) }
+                onOpenEditor = { onOpenSetEditor(set) }
             )
         }
 
@@ -472,9 +494,9 @@ private fun ExerciseCard(
             }
 
             Text(
-                text = "目标强度 RPE 8.0",
-                fontSize = 11.sp,
-                color = AppleTextSecondary
+                text = "点击重量或次数可快速加减",
+                fontSize = 10.sp,
+                color = AppleTextTertiary
             )
         }
     }
@@ -485,13 +507,17 @@ private fun SetRowItem(
     order: Int,
     set: WorkoutSetEntity,
     onToggle: () -> Unit,
-    onUpdate: (Double, Int) -> Unit
+    onOpenEditor: () -> Unit
 ) {
-    var weightText by remember(set.weightKg) { mutableStateOf(set.weightKg.toString()) }
-    var repsText by remember(set.reps) { mutableStateOf(set.reps.toString()) }
-
-    val rowBg = if (set.isCompleted) AppleGray5.copy(alpha = 0.5f) else Color.Transparent
+    val rowBg = if (set.isCompleted) AppleGray5.copy(alpha = 0.45f) else Color.Transparent
     val rowBorder = if (!set.isCompleted && order == 3) AppleFitnessGreen.copy(alpha = 0.3f) else Color.Transparent
+
+    val typeLabel = when (set.setType) {
+        "WARMUP" -> "W$order"
+        "DROP" -> "D$order"
+        "FAILURE" -> "F$order"
+        else -> "$order"
+    }
 
     Row(
         modifier = Modifier
@@ -503,81 +529,68 @@ private fun SetRowItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // 1. Order
-        Text(
-            text = "$order",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (set.isCompleted) AppleFitnessGreen else AppleTextSecondary,
-            modifier = Modifier.weight(0.8f),
-            textAlign = TextAlign.Center
-        )
+        // 1. Order / Set Type Badge (Clickable to edit)
+        Box(
+            modifier = Modifier
+                .weight(0.8f)
+                .clickable { onOpenEditor() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = typeLabel,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (set.isCompleted) AppleFitnessGreen else AppleTextSecondary
+            )
+        }
 
         // 2. Previous Benchmark
         Text(
-            text = "${set.weightKg} × ${set.reps}",
+            text = "${formatWeight(set.weightKg)} × ${set.reps}",
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
             color = if (order == 3 && !set.isCompleted) AppleCautionOrange else AppleTextSecondary,
-            modifier = Modifier.weight(2.2f),
+            modifier = Modifier.weight(2.0f),
             textAlign = TextAlign.Center
         )
 
-        // 3. Weight Input
+        // 3. Weight Pill (Click to open Gym Stepper Editor)
         Box(
             modifier = Modifier
                 .weight(1.8f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(AppleGray5)
-                .padding(vertical = 4.dp, horizontal = 6.dp),
+                .clickable { onOpenEditor() }
+                .padding(vertical = 6.dp, horizontal = 6.dp),
             contentAlignment = Alignment.Center
         ) {
-            BasicTextField(
-                value = weightText,
-                onValueChange = {
-                    weightText = it
-                    it.toDoubleOrNull()?.let { w -> onUpdate(w, set.reps) }
-                },
-                textStyle = TextStyle(
-                    color = AppleTextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    fontFamily = FontFamily.Monospace
-                ),
-                cursorBrush = SolidColor(AppleFitnessGreen),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
+            Text(
+                text = formatWeight(set.weightKg),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = AppleTextPrimary
             )
         }
 
         Spacer(modifier = Modifier.size(4.dp))
 
-        // 4. Reps Input
+        // 4. Reps Pill (Click to open Gym Stepper Editor)
         Box(
             modifier = Modifier
                 .weight(1.2f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(AppleGray5)
-                .padding(vertical = 4.dp, horizontal = 6.dp),
+                .clickable { onOpenEditor() }
+                .padding(vertical = 6.dp, horizontal = 6.dp),
             contentAlignment = Alignment.Center
         ) {
-            BasicTextField(
-                value = repsText,
-                onValueChange = {
-                    repsText = it
-                    it.toIntOrNull()?.let { r -> onUpdate(set.weightKg, r) }
-                },
-                textStyle = TextStyle(
-                    color = AppleTextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    fontFamily = FontFamily.Monospace
-                ),
-                cursorBrush = SolidColor(AppleFitnessGreen),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
+            Text(
+                text = "${set.reps}",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = AppleTextPrimary
             )
         }
 
@@ -589,7 +602,7 @@ private fun SetRowItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
                     .background(if (set.isCompleted) AppleFitnessGreen else Color.Transparent)
                     .border(
@@ -605,9 +618,251 @@ private fun SetRowItem(
                         imageVector = LucideIcons.Check,
                         contentDescription = null,
                         tint = Color.Black,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickAdjustSetBottomSheet(
+    exerciseName: String,
+    set: WorkoutSetEntity,
+    onDismiss: () -> Unit,
+    onSave: (Double, Int, String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var currentWeight by remember(set.weightKg) { mutableStateOf(set.weightKg) }
+    var currentReps by remember(set.reps) { mutableStateOf(set.reps) }
+    var currentType by remember(set.setType) { mutableStateOf(set.setType) }
+
+    val haptic = LocalHapticFeedback.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppleGray6,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(AppleGray4)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = exerciseName,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleTextPrimary
+                    )
+                    Text(
+                        text = "调整第 ${set.setOrder} 组负荷与次数",
+                        fontSize = 12.sp,
+                        color = AppleTextSecondary
+                    )
+                }
+
+                // Delete Set Action
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AppleSystemRed.copy(alpha = 0.12f))
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onDelete()
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "删除此组",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleSystemRed
+                    )
+                }
+            }
+
+            // Set Type Segmented Control
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AppleGray5)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                listOf("NORMAL" to "正式组", "WARMUP" to "热身", "DROP" to "递减", "FAILURE" to "力竭").forEach { (type, label) ->
+                    val isSelected = (currentType == type)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(if (isSelected) Color.White else Color.Transparent)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentType = type
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.Black else AppleTextSecondary
+                        )
+                    }
+                }
+            }
+
+            // 1. Weight Stepper Control
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleGray5)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "负荷重量", fontSize = 12.sp, color = AppleTextSecondary)
+                    Text(
+                        text = "${formatWeight(currentWeight)} kg",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleFitnessGreen
+                    )
+                }
+
+                // Quick Weight Increment / Decrement Pills
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(-5.0, -2.5, -1.25, 1.25, 2.5, 5.0).forEach { delta ->
+                        val label = if (delta > 0) "+${formatWeight(delta)}" else formatWeight(delta)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AppleGray6)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val next = (currentWeight + delta).coerceAtLeast(0.0)
+                                    currentWeight = (next * 10).toInt() / 10.0
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppleTextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. Reps Stepper Control
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleGray5)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "完成次数", fontSize = 12.sp, color = AppleTextSecondary)
+                    Text(
+                        text = "$currentReps 次",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleTextPrimary
+                    )
+                }
+
+                // Quick Reps Steppers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(-5, -2, -1, 1, 2, 5).forEach { delta ->
+                        val label = if (delta > 0) "+$delta" else "$delta"
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AppleGray6)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    currentReps = (currentReps + delta).coerceAtLeast(1)
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppleTextPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Confirm Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AppleFitnessGreen)
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSave(currentWeight, currentReps, currentType)
+                    }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "确认并应用",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
             }
         }
     }

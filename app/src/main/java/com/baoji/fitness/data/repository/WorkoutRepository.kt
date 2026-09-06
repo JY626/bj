@@ -85,6 +85,10 @@ class WorkoutRepository(
         workoutDao.updateSet(set.copy(weightKg = weightKg, reps = reps))
     }
 
+    suspend fun deleteSet(set: WorkoutSetEntity) {
+        workoutDao.deleteSet(set)
+    }
+
     fun getWeeklyMuscleVolumes(): Flow<List<MuscleVolumeStatus>> {
         // Last 7 days
         val sevenDaysAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
