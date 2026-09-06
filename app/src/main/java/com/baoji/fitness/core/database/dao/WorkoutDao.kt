@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutDao {
-    @Query("SELECT * FROM workout_sessions WHERE status = 'ACTIVE' LIMIT 1")
+    @Query("SELECT * FROM workout_sessions WHERE status = 'ACTIVE' ORDER BY id DESC LIMIT 1")
     fun getActiveSession(): Flow<WorkoutSessionEntity?>
 
     @Query("SELECT * FROM workout_sessions WHERE id = :sessionId")
@@ -27,9 +27,15 @@ interface WorkoutDao {
     @Update
     suspend fun updateSession(session: WorkoutSessionEntity)
 
+    @Query("UPDATE workout_sessions SET status = 'COMPLETED' WHERE status = 'ACTIVE'")
+    suspend fun closeAllActiveSessions()
+
     // Sets
-    @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId ORDER BY exerciseId ASC, setOrder ASC")
+    @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId ORDER BY exerciseId ASC, setOrder ASC, id ASC")
     fun getSetsForSession(sessionId: Long): Flow<List<WorkoutSetEntity>>
+
+    @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId ORDER BY setOrder ASC, id ASC")
+    suspend fun getSetsForExerciseInSession(sessionId: Long, exerciseId: Long): List<WorkoutSetEntity>
 
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY completedAt DESC LIMIT :limit")
     suspend fun getLastCompletedSetsForExercise(exerciseId: Long, limit: Int = 10): List<WorkoutSetEntity>
@@ -45,6 +51,9 @@ interface WorkoutDao {
 
     @Delete
     suspend fun deleteSet(set: WorkoutSetEntity)
+
+    @Query("DELETE FROM workout_sets WHERE sessionId = :sessionId")
+    suspend fun deleteSetsForSession(sessionId: Long)
 
     @Query("SELECT * FROM workout_sets WHERE completedAt >= :sinceTimestamp AND isCompleted = 1")
     fun getCompletedSetsSince(sinceTimestamp: Long): Flow<List<WorkoutSetEntity>>

@@ -20,9 +20,12 @@ class WorkoutRepository(
 ) {
     fun getActiveSession(): Flow<WorkoutSessionEntity?> = workoutDao.getActiveSession()
 
+    fun getAllSessions(): Flow<List<WorkoutSessionEntity>> = workoutDao.getAllSessions()
+
     fun getAllExercises(): Flow<List<ExerciseEntity>> = exerciseDao.getAllExercises()
 
     suspend fun startNewSession(title: String = "自由推力训练"): Long {
+        workoutDao.closeAllActiveSessions()
         val session = WorkoutSessionEntity(
             title = title,
             startTime = System.currentTimeMillis(),
@@ -87,6 +90,17 @@ class WorkoutRepository(
 
     suspend fun deleteSet(set: WorkoutSetEntity) {
         workoutDao.deleteSet(set)
+    }
+
+    suspend fun deleteSetAndReorder(set: WorkoutSetEntity) {
+        workoutDao.deleteSet(set)
+        val remaining = workoutDao.getSetsForExerciseInSession(set.sessionId, set.exerciseId)
+        remaining.forEachIndexed { index, s ->
+            val expectedOrder = index + 1
+            if (s.setOrder != expectedOrder) {
+                workoutDao.updateSet(s.copy(setOrder = expectedOrder))
+            }
+        }
     }
 
     fun getWeeklyMuscleVolumes(): Flow<List<MuscleVolumeStatus>> {

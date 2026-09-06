@@ -30,6 +30,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -124,22 +125,46 @@ fun WorkoutScreen(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(AppleFitnessGreen)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                showSummaryDialog = true
-                            }
-                            .padding(horizontal = 16.dp, vertical = 7.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "完成",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
+                        // Reset button to immediately clean any buggy/duplicate state
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppleGray5)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    viewModel.resetCurrentSession()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "重置",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = AppleTextSecondary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppleFitnessGreen)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showSummaryDialog = true
+                                }
+                                .padding(horizontal = 16.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "完成",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
                     }
                 }
             }
@@ -214,8 +239,72 @@ fun WorkoutScreen(
                 }
             }
 
+            // Empty state if active session was archived
+            if (activeSession == null) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(AppleGray6)
+                            .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(AppleFitnessGreen.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Dumbbell,
+                                contentDescription = null,
+                                tint = AppleFitnessGreen,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "今日训练已归档",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppleTextPrimary
+                            )
+                            Text(
+                                text = "数据已同步至负荷分析，随时开启新一轮训练",
+                                fontSize = 12.sp,
+                                color = AppleTextSecondary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppleFitnessGreen)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.startNewWorkout("推力日 A · 胸肩三头")
+                                }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "开始今日推力训练",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
+
             // 4. Exercise Cards List
-            items(exerciseGroups) { group ->
+            items(exerciseGroups, key = { it.exercise.id }) { group ->
                 ExerciseCard(
                     group = group,
                     onToggleSet = {
@@ -373,6 +462,10 @@ private fun ExerciseCard(
     onOpenSetEditor: (WorkoutSetEntity) -> Unit,
     onAddSet: () -> Unit
 ) {
+    val benchmarkText = if (group.exercise.personalRecordWeight > 0.0) {
+        "${formatWeight(group.exercise.personalRecordWeight)} × ${group.exercise.personalRecordReps}"
+    } else "-"
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -413,7 +506,7 @@ private fun ExerciseCard(
                     }
                 }
                 Text(
-                    text = "基准参考: ${formatWeight(group.exercise.personalRecordWeight)} kg × ${group.exercise.personalRecordReps} · 估算1RM ${formatWeight(group.benchmark1RM)} kg",
+                    text = "基准参考: $benchmarkText · 估算1RM ${formatWeight(group.benchmark1RM)} kg",
                     fontSize = 11.sp,
                     color = AppleTextSecondary,
                     modifier = Modifier.padding(top = 2.dp)
@@ -447,37 +540,39 @@ private fun ExerciseCard(
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = "组", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(0.8f), textAlign = TextAlign.Center)
-            Text(text = "上周记录", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(2.0f), textAlign = TextAlign.Center)
-            Text(text = "重量(kg)", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.8f), textAlign = TextAlign.Center)
+            Text(text = "组", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
+            Text(text = "参考基准", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.8f), textAlign = TextAlign.Center)
+            Text(text = "重量(kg)", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.7f), textAlign = TextAlign.Center)
             Text(text = "次数", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
             Text(text = "完成", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
         }
 
-        // Sets Rows
-        group.sets.forEachIndexed { index, set ->
-            SetRowItem(
-                order = index + 1,
-                set = set,
-                onToggle = { onToggleSet(set) },
-                onOpenEditor = { onOpenSetEditor(set) }
-            )
+        // Sets Rows with stable keys
+        group.sets.forEach { set ->
+            key(set.id) {
+                SetRowItem(
+                    set = set,
+                    benchmarkText = benchmarkText,
+                    onToggle = { onToggleSet(set) },
+                    onOpenEditor = { onOpenSetEditor(set) }
+                )
+            }
         }
 
         // Add Set Button
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(top = 6.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppleGray5.copy(alpha = 0.5f))
+                .clickable { onAddSet() }
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
         ) {
             Row(
-                modifier = Modifier
-                    .clickable { onAddSet() }
-                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
                     imageVector = LucideIcons.Plus,
@@ -486,37 +581,30 @@ private fun ExerciseCard(
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
-                    text = "增加组数",
+                    text = "添加一组",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     color = AppleFitnessGreen
                 )
             }
-
-            Text(
-                text = "点击重量或次数可快速加减",
-                fontSize = 10.sp,
-                color = AppleTextTertiary
-            )
         }
     }
 }
 
 @Composable
 private fun SetRowItem(
-    order: Int,
     set: WorkoutSetEntity,
+    benchmarkText: String,
     onToggle: () -> Unit,
     onOpenEditor: () -> Unit
 ) {
     val rowBg = if (set.isCompleted) AppleGray5.copy(alpha = 0.45f) else Color.Transparent
-    val rowBorder = if (!set.isCompleted && order == 3) AppleFitnessGreen.copy(alpha = 0.3f) else Color.Transparent
 
     val typeLabel = when (set.setType) {
-        "WARMUP" -> "W$order"
-        "DROP" -> "D$order"
-        "FAILURE" -> "F$order"
-        else -> "$order"
+        "WARMUP" -> "W${set.setOrder}"
+        "DROP" -> "D${set.setOrder}"
+        "FAILURE" -> "F${set.setOrder}"
+        else -> "${set.setOrder}"
     }
 
     Row(
@@ -524,16 +612,18 @@ private fun SetRowItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(rowBg)
-            .border(1.dp, rowBorder, RoundedCornerShape(12.dp))
-            .padding(vertical = 6.dp, horizontal = 4.dp),
+            .border(1.dp, AppleHairline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .padding(vertical = 4.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         // 1. Order / Set Type Badge (Clickable to edit)
         Box(
             modifier = Modifier
-                .weight(0.8f)
-                .clickable { onOpenEditor() },
+                .weight(0.9f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenEditor() }
+                .padding(vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -544,24 +634,24 @@ private fun SetRowItem(
             )
         }
 
-        // 2. Previous Benchmark
+        // 2. Reference Benchmark (Previous Best / Target)
         Text(
-            text = "${formatWeight(set.weightKg)} × ${set.reps}",
+            text = benchmarkText,
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
-            color = if (order == 3 && !set.isCompleted) AppleCautionOrange else AppleTextSecondary,
-            modifier = Modifier.weight(2.0f),
+            color = AppleTextTertiary,
+            modifier = Modifier.weight(1.8f),
             textAlign = TextAlign.Center
         )
 
-        // 3. Weight Pill (Click to open Gym Stepper Editor)
+        // 3. Weight Pill (Click to open Stepper Editor)
         Box(
             modifier = Modifier
-                .weight(1.8f)
+                .weight(1.7f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(AppleGray5)
                 .clickable { onOpenEditor() }
-                .padding(vertical = 6.dp, horizontal = 6.dp),
+                .padding(vertical = 6.dp, horizontal = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -575,14 +665,14 @@ private fun SetRowItem(
 
         Spacer(modifier = Modifier.size(4.dp))
 
-        // 4. Reps Pill (Click to open Gym Stepper Editor)
+        // 4. Reps Pill (Click to open Stepper Editor)
         Box(
             modifier = Modifier
                 .weight(1.2f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(AppleGray5)
                 .clickable { onOpenEditor() }
-                .padding(vertical = 6.dp, horizontal = 6.dp),
+                .padding(vertical = 6.dp, horizontal = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -594,10 +684,13 @@ private fun SetRowItem(
             )
         }
 
-        // 5. Complete Button (Apple style circular toggle)
+        // 5. Complete Button (Full cell height 44dp clickable target)
         Box(
             modifier = Modifier
-                .weight(1.2f),
+                .weight(1.2f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onToggle() },
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -609,8 +702,7 @@ private fun SetRowItem(
                         width = 1.5.dp,
                         color = if (set.isCompleted) AppleFitnessGreen else AppleHairline,
                         shape = CircleShape
-                    )
-                    .clickable { onToggle() },
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 if (set.isCompleted) {
