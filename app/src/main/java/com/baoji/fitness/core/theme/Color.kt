@@ -1,0 +1,22 @@
+package com.baoji.fitness.core.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Apple OLED Dark Mode Palette
+val AppleBlack = Color(0xFF000000)
+val AppleGray6 = Color(0xFF1C1C1E) // Primary Card Surface
+val AppleGray5 = Color(0xFF2C2C2E) // Input / Secondary Surface
+val AppleGray4 = Color(0xFF3A3A3C) // Active States / Borders
+val AppleHairline = Color(0x1AFFFFFF) // 10% White subtle border
+
+// Apple HIG Accents
+val AppleFitnessGreen = Color(0xFF30D158) // Workout Completed / Overload
+val AppleCautionOrange = Color(0xFFFF9F0A) // Warning / Challenge Weight
+val AppleSystemBlue = Color(0xFF0A84FF) // Navigation / System Actions
+val AppleSystemPurple = Color(0xFFBF5AF2) // AI / Intelligence Accent
+val AppleSystemRed = Color(0xFFFF453A) // Delete / Drop
+
+// Text Colors
+val AppleTextPrimary = Color(0xFFFFFFFF)
+val AppleTextSecondary = Color(0xFF8E8E93)
+val AppleTextTertiary = Color(0xFF636366)

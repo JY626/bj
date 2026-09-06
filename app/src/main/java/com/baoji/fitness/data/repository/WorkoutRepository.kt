@@ -1,0 +1,109 @@
+package com.baoji.fitness.data.repository
+
+import com.baoji.fitness.core.database.dao.ExerciseDao
+import com.baoji.fitness.core.database.dao.WorkoutDao
+import com.baoji.fitness.core.database.entity.ExerciseEntity
+import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
+import com.baoji.fitness.core.database.entity.WorkoutSetEntity
+import com.baoji.fitness.domain.algorithm.OverloadCalculator
+import com.baoji.fitness.domain.model.Exercise
+import com.baoji.fitness.domain.model.ExerciseWithSets
+import com.baoji.fitness.domain.model.MuscleVolumeStatus
+import com.baoji.fitness.domain.model.WorkoutSet
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+
+class WorkoutRepository(
+    private val workoutDao: WorkoutDao,
+    private val exerciseDao: ExerciseDao
+) {
+    fun getActiveSession(): Flow<WorkoutSessionEntity?> = workoutDao.getActiveSession()
+
+    fun getAllExercises(): Flow<List<ExerciseEntity>> = exerciseDao.getAllExercises()
+
+    suspend fun startNewSession(title: String = "自由推力训练"): Long {
+        val session = WorkoutSessionEntity(
+            title = title,
+            startTime = System.currentTimeMillis(),
+            status = "ACTIVE"
+        )
+        return workoutDao.insertSession(session)
+    }
+
+    suspend fun finishSession(session: WorkoutSessionEntity, totalVolume: Double) {
+        val updated = session.copy(
+            endTime = System.currentTimeMillis(),
+            totalVolumeKg = totalVolume,
+            status = "COMPLETED"
+        )
+        workoutDao.updateSession(updated)
+    }
+
+    fun getSetsForSession(sessionId: Long): Flow<List<WorkoutSetEntity>> =
+        workoutDao.getSetsForSession(sessionId)
+
+    fun getExerciseHistory(exerciseId: Long): Flow<List<WorkoutSetEntity>> =
+        workoutDao.getHistoryForExercise(exerciseId)
+
+    suspend fun addSet(
+        sessionId: Long,
+        exerciseId: Long,
+        weightKg: Double,
+        reps: Int,
+        setOrder: Int,
+        setType: String = "NORMAL"
+    ): Long {
+        val entity = WorkoutSetEntity(
+            sessionId = sessionId,
+            exerciseId = exerciseId,
+            setOrder = setOrder,
+            setType = setType,
+            weightKg = weightKg,
+            reps = reps
+        )
+        return workoutDao.insertSet(entity)
+    }
+
+    suspend fun completeSet(set: WorkoutSetEntity, completed: Boolean) {
+        val updated = set.copy(
+            isCompleted = completed,
+            completedAt = if (completed) System.currentTimeMillis() else null
+        )
+        workoutDao.updateSet(updated)
+
+        // If completed and higher than personal record, update exercise PR
+        if (completed) {
+            val exercise = exerciseDao.getExerciseById(set.exerciseId)
+            if (exercise != null && set.weightKg > exercise.personalRecordWeight) {
+                exerciseDao.updatePR(set.exerciseId, set.weightKg, set.reps)
+            }
+        }
+    }
+
+    suspend fun updateSetWeightAndReps(set: WorkoutSetEntity, weightKg: Double, reps: Int) {
+        workoutDao.updateSet(set.copy(weightKg = weightKg, reps = reps))
+    }
+
+    fun getWeeklyMuscleVolumes(): Flow<List<MuscleVolumeStatus>> {
+        // Last 7 days
+        val sevenDaysAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+        return combine(
+            workoutDao.getCompletedSetsSince(sevenDaysAgo),
+            exerciseDao.getAllExercises()
+        ) { sets, exercises ->
+            val exerciseMap = exercises.associateBy { it.id }
+            val muscleCounts = mutableMapOf<String, Int>()
+
+            for (s in sets) {
+                val exercise = exerciseMap[s.exerciseId]
+                val muscle = exercise?.targetMuscle ?: "胸部"
+                muscleCounts[muscle] = (muscleCounts[muscle] ?: 0) + 1
+            }
+
+            listOf("胸部", "背部", "腿部", "肩部", "手臂").map { muscle ->
+                OverloadCalculator.evaluateMuscleVolume(muscle, muscleCounts[muscle] ?: 0)
+            }
+        }
+    }
+}
