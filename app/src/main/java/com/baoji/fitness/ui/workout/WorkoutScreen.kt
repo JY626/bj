@@ -231,7 +231,7 @@ private fun MetricItem(
             fontSize = 11.sp,
             color = AppleTextSecondary
         )
-        Row(verticalAlignment = Alignment.Baseline) {
+        Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 fontSize = 16.sp,

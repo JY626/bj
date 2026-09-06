@@ -99,7 +99,7 @@ fun RestTimerCapsule(
                             color = AppleTextSecondary,
                             letterSpacing = 0.5.sp
                         )
-                        Row(verticalAlignment = Alignment.Baseline) {
+                        Row(verticalAlignment = Alignment.Bottom) {
                             Text(
                                 text = timeString,
                                 fontSize = 16.sp,

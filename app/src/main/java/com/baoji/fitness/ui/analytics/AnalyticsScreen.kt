@@ -136,7 +136,7 @@ fun AnalyticsScreen(
                             color = AppleTextSecondary
                         )
                         Row(
-                            verticalAlignment = Alignment.Baseline,
+                            verticalAlignment = Alignment.Bottom,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 2.dp)
                         ) {

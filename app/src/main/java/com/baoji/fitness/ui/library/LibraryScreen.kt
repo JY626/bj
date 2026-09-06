@@ -234,7 +234,7 @@ private fun BioCard(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = label, fontSize = 10.sp, color = AppleTextSecondary)
-        Row(verticalAlignment = Alignment.Baseline, modifier = Modifier.padding(top = 2.dp)) {
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
             Text(
                 text = value,
                 fontSize = 14.sp,
