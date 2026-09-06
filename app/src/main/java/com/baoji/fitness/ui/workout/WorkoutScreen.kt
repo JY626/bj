@@ -62,7 +62,12 @@ import com.baoji.fitness.core.theme.AppleSystemRed
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
+import com.baoji.fitness.domain.model.PresetTemplates
+import com.baoji.fitness.domain.model.WorkoutRoutineTemplate
 import com.baoji.fitness.ui.workout.components.RestTimerCapsule
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 fun formatWeight(w: Double): String = if (w % 1.0 == 0.0) w.toInt().toString() else w.toString()
 
@@ -83,7 +88,13 @@ fun WorkoutScreen(
 
     var showAddExerciseSheet by remember { mutableStateOf(false) }
     var showSummaryDialog by remember { mutableStateOf(false) }
+    var showTemplateSheet by remember { mutableStateOf(false) }
     var activeEditingSet by remember { mutableStateOf<Pair<ExerciseEntity, WorkoutSetEntity>?>(null) }
+
+    val dateFormat = remember { SimpleDateFormat("M月d日 EEEE", Locale.CHINESE) }
+    val currentDateText = remember(activeSession?.startTime) {
+        dateFormat.format(Date(activeSession?.startTime ?: System.currentTimeMillis()))
+    }
 
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
     val totalVolume = completedSets.sumOf { it.weightKg * it.reps }.toInt()
@@ -108,27 +119,58 @@ fun WorkoutScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "PUSH SESSION A · 循环训练",
-                            fontSize = 11.sp,
+                            text = currentDateText.uppercase(),
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = AppleTextSecondary,
+                            color = AppleFitnessGreen,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = activeSession?.title ?: "胸部与肩前束",
-                            fontSize = 24.sp,
+                            text = activeSession?.title ?: "今日训练",
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppleTextPrimary,
-                            letterSpacing = (-0.5).sp
+                            letterSpacing = (-0.5).sp,
+                            maxLines = 1
                         )
                     }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Switch Template Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppleGray5)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showTemplateSheet = true
+                                }
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = LucideIcons.Calendar,
+                                    contentDescription = null,
+                                    tint = AppleFitnessGreen,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "计划",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppleFitnessGreen
+                                )
+                            }
+                        }
+
                         // Reset button to immediately clean any buggy/duplicate state
                         Box(
                             modifier = Modifier
@@ -138,7 +180,7 @@ fun WorkoutScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     viewModel.resetCurrentSession()
                                 }
-                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
                         ) {
                             Text(
                                 text = "重置",
@@ -156,7 +198,7 @@ fun WorkoutScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     showSummaryDialog = true
                                 }
-                                .padding(horizontal = 16.dp, vertical = 7.dp)
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
                         ) {
                             Text(
                                 text = "完成",
@@ -248,13 +290,13 @@ fun WorkoutScreen(
                             .clip(RoundedCornerShape(24.dp))
                             .background(AppleGray6)
                             .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
-                            .padding(24.dp),
+                            .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(AppleFitnessGreen.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
@@ -263,7 +305,7 @@ fun WorkoutScreen(
                                 imageVector = LucideIcons.Dumbbell,
                                 contentDescription = null,
                                 tint = AppleFitnessGreen,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -274,30 +316,52 @@ fun WorkoutScreen(
                                 color = AppleTextPrimary
                             )
                             Text(
-                                text = "数据已同步至负荷分析，随时开启新一轮训练",
+                                text = "选择下方训练日，随时开启新一轮训练",
                                 fontSize = 12.sp,
                                 color = AppleTextSecondary,
                                 modifier = Modifier.padding(top = 4.dp)
                             )
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(AppleFitnessGreen)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    viewModel.startNewWorkout("推力日 A · 胸肩三头")
-                                }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = "开始今日推力训练",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
+                            PresetTemplates.all.forEach { template ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(AppleGray5)
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.startNewWorkoutFromTemplate(template)
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = template.title,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AppleTextPrimary
+                                        )
+                                        Text(
+                                            text = "${template.focusSplit} · ${template.exercises.size} 个预设动作",
+                                            fontSize = 11.sp,
+                                            color = AppleTextSecondary
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = LucideIcons.ChevronRight,
+                                        contentDescription = null,
+                                        tint = AppleFitnessGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -420,6 +484,21 @@ fun WorkoutScreen(
                 onDismiss = { showSummaryDialog = false }
             )
         }
+
+        // Routine Template Selection Bottom Sheet
+        if (showTemplateSheet) {
+            RoutineTemplateBottomSheet(
+                onDismiss = { showTemplateSheet = false },
+                onSelectTemplate = { template ->
+                    viewModel.startNewWorkoutFromTemplate(template)
+                    showTemplateSheet = false
+                },
+                onStartCustom = { title ->
+                    viewModel.startCustomWorkout(title)
+                    showTemplateSheet = false
+                }
+            )
+        }
     }
 }
 
@@ -462,9 +541,12 @@ private fun ExerciseCard(
     onOpenSetEditor: (WorkoutSetEntity) -> Unit,
     onAddSet: () -> Unit
 ) {
-    val benchmarkText = if (group.exercise.personalRecordWeight > 0.0) {
-        "${formatWeight(group.exercise.personalRecordWeight)} × ${group.exercise.personalRecordReps}"
-    } else "-"
+    val benchmarkSummary = group.benchmarkSummary
+    val benchmarkSub = if (benchmarkSummary != "-") {
+        "基准参考: $benchmarkSummary" + if (group.benchmark1RM > 0.0) " · 估算1RM ${formatWeight(group.benchmark1RM)} kg" else ""
+    } else {
+        "基准参考: 首次记录 · 暂无历史数据"
+    }
 
     Column(
         modifier = Modifier
@@ -506,7 +588,7 @@ private fun ExerciseCard(
                     }
                 }
                 Text(
-                    text = "基准参考: $benchmarkText · 估算1RM ${formatWeight(group.benchmark1RM)} kg",
+                    text = benchmarkSub,
                     fontSize = 11.sp,
                     color = AppleTextSecondary,
                     modifier = Modifier.padding(top = 2.dp)
@@ -549,10 +631,16 @@ private fun ExerciseCard(
 
         // Sets Rows with stable keys
         group.sets.forEach { set ->
+            val prevSet = group.previousSessionSets[set.setOrder]
+            val setBenchmarkText = if (prevSet != null && prevSet.weightKg > 0.0) {
+                "${formatWeight(prevSet.weightKg)} × ${prevSet.reps}"
+            } else {
+                "-"
+            }
             key(set.id) {
                 SetRowItem(
                     set = set,
-                    benchmarkText = benchmarkText,
+                    benchmarkText = setBenchmarkText,
                     onToggle = { onToggleSet(set) },
                     onOpenEditor = { onOpenSetEditor(set) }
                 )
@@ -1232,6 +1320,165 @@ private fun WorkoutSummaryDialog(
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoutineTemplateBottomSheet(
+    onDismiss: () -> Unit,
+    onSelectTemplate: (WorkoutRoutineTemplate) -> Unit,
+    onStartCustom: (String) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    var customTitle by remember { mutableStateOf("") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppleGray6,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(AppleGray4)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "选择训练日",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleTextPrimary
+                    )
+                    Text(
+                        text = "切换至不同分化计划或创建自定义训练日",
+                        fontSize = 12.sp,
+                        color = AppleTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+
+            // Preset templates list
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PresetTemplates.all.forEach { template ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppleGray5)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSelectTemplate(template)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = template.title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppleTextPrimary
+                            )
+                            Text(
+                                text = "${template.focusSplit} · ${template.exercises.size} 个预设动作",
+                                fontSize = 11.sp,
+                                color = AppleTextSecondary
+                            )
+                        }
+                        Icon(
+                            imageVector = LucideIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // Custom workout section
+            HorizontalDivider(color = AppleHairline, thickness = 0.5.dp)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "新建自定义训练日",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppleTextSecondary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AppleGray5)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        if (customTitle.isEmpty()) {
+                            Text(
+                                text = "输入训练名称 (如: 肩臂专项)",
+                                fontSize = 13.sp,
+                                color = AppleTextTertiary
+                            )
+                        }
+                        BasicTextField(
+                            value = customTitle,
+                            onValueChange = { customTitle = it },
+                            textStyle = TextStyle(
+                                fontSize = 13.sp,
+                                color = AppleTextPrimary
+                            ),
+                            cursorBrush = SolidColor(AppleFitnessGreen),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (customTitle.isNotBlank()) AppleFitnessGreen else AppleGray4)
+                            .clickable(enabled = customTitle.isNotBlank()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onStartCustom(customTitle.trim())
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "开启",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (customTitle.isNotBlank()) Color.Black else AppleTextSecondary
+                        )
+                    }
                 }
             }
         }

@@ -7,6 +7,8 @@ import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
+import com.baoji.fitness.domain.model.PresetTemplates
+import com.baoji.fitness.domain.model.WorkoutRoutineTemplate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,7 +26,9 @@ import kotlinx.coroutines.launch
 data class ExerciseGroup(
     val exercise: ExerciseEntity,
     val sets: List<WorkoutSetEntity>,
-    val benchmark1RM: Double = 0.0
+    val benchmark1RM: Double = 0.0,
+    val previousSessionSets: Map<Int, WorkoutSetEntity> = emptyMap(),
+    val benchmarkSummary: String = ""
 )
 
 class WorkoutViewModel(
@@ -53,13 +57,25 @@ class WorkoutViewModel(
                     exerciseOrder.mapNotNull { exerciseId ->
                         val setList = grouped[exerciseId] ?: return@mapNotNull null
                         val exercise = exerciseMap[exerciseId] ?: return@mapNotNull null
-                        val bestWeight = exercise.personalRecordWeight
-                        val bestReps = exercise.personalRecordReps
+
+                        val prevSetsMap = repository.getPreviousSessionSetsForExercise(exerciseId, session.id)
+                        val topPrev = prevSetsMap.values.maxByOrNull { it.weightKg }
+                        val benchmarkSummary = if (topPrev != null && topPrev.weightKg > 0.0) {
+                            "前次基准: ${if (topPrev.weightKg % 1.0 == 0.0) topPrev.weightKg.toInt().toString() else topPrev.weightKg.toString()} kg × ${topPrev.reps}"
+                        } else {
+                            "首次训练 · 暂无基准"
+                        }
+
+                        val bestWeight = topPrev?.weightKg ?: exercise.personalRecordWeight
+                        val bestReps = topPrev?.reps ?: exercise.personalRecordReps
                         val e1rm = OverloadCalculator.calculateEstimated1RM(bestWeight, bestReps)
+
                         ExerciseGroup(
                             exercise = exercise,
                             sets = setList.sortedBy { it.setOrder },
-                            benchmark1RM = e1rm
+                            benchmark1RM = e1rm,
+                            previousSessionSets = prevSetsMap,
+                            benchmarkSummary = benchmarkSummary
                         )
                     }
                 }
@@ -87,35 +103,47 @@ class WorkoutViewModel(
             if (currentActive == null) {
                 val allSessions = repository.getAllSessions().first()
                 if (allSessions.isEmpty()) {
-                    startNewWorkout("推力日 A · 胸肩三头")
+                    startNewWorkoutFromTemplate(PresetTemplates.PUSH)
                 }
             }
         }
     }
 
-    fun startNewWorkout(title: String = "推力日 A · 胸肩三头") {
+    fun startNewWorkoutFromTemplate(template: WorkoutRoutineTemplate) {
         viewModelScope.launch {
-            val sessionId = repository.startNewSession(title)
+            val sessionId = repository.startNewSession(template.name)
             val exercises = repository.getAllExercises().first { it.isNotEmpty() }
-            val bench = exercises.find { it.name.contains("平板杠铃卧推") } ?: exercises.firstOrNull()
-            val incline = exercises.find { it.name.contains("上斜哑铃") }
+            val exerciseMap = exercises.associateBy { it.name }
 
-            bench?.let {
-                repository.addSet(sessionId, it.id, 60.0, 12, 1, "WARMUP")
-                repository.addSet(sessionId, it.id, 80.0, 8, 2, "NORMAL")
-                repository.addSet(sessionId, it.id, 82.5, 6, 3, "NORMAL")
+            template.defaultExerciseNames.forEach { exerciseName ->
+                val exercise = exerciseMap[exerciseName] ?: exercises.find { it.name.contains(exerciseName) }
+                if (exercise != null) {
+                    val prevSets = repository.getPreviousSessionSetsForExercise(exercise.id, sessionId)
+                    val defaultWeight = prevSets[1]?.weightKg ?: 0.0
+                    val defaultReps = prevSets[1]?.reps ?: 10
+
+                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 1, "NORMAL")
+                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 2, "NORMAL")
+                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 3, "NORMAL")
+                }
             }
-            incline?.let {
-                repository.addSet(sessionId, it.id, 26.0, 10, 1, "NORMAL")
-                repository.addSet(sessionId, it.id, 26.0, 9, 2, "NORMAL")
-                repository.addSet(sessionId, it.id, 26.0, 8, 3, "NORMAL")
-            }
+        }
+    }
+
+    fun startCustomWorkout(title: String) {
+        viewModelScope.launch {
+            repository.startNewSession(title.ifBlank { "自定义训练日" })
         }
     }
 
     fun resetCurrentSession() {
         val session = activeSession.value ?: return
-        startNewWorkout(session.title)
+        val matchingTemplate = PresetTemplates.allTemplates.find { it.name == session.title }
+        if (matchingTemplate != null) {
+            startNewWorkoutFromTemplate(matchingTemplate)
+        } else {
+            startCustomWorkout(session.title)
+        }
     }
 
     fun toggleSetCompletion(set: WorkoutSetEntity) {
@@ -140,13 +168,9 @@ class WorkoutViewModel(
     fun addExerciseToSession(exerciseId: Long) {
         val session = activeSession.value ?: return
         viewModelScope.launch {
-            val exercise = allExercises.value.find { it.id == exerciseId }
-            val defaultWeight = if ((exercise?.personalRecordWeight ?: 0.0) > 0.0) {
-                exercise!!.personalRecordWeight
-            } else 40.0
-            val defaultReps = if ((exercise?.personalRecordReps ?: 0) > 0) {
-                exercise!!.personalRecordReps
-            } else 8
+            val prevSets = repository.getPreviousSessionSetsForExercise(exerciseId, session.id)
+            val defaultWeight = prevSets[1]?.weightKg ?: 0.0
+            val defaultReps = prevSets[1]?.reps ?: 8
 
             // Insert 3 initial sets for this newly added exercise
             repository.addSet(session.id, exerciseId, defaultWeight, defaultReps, 1, "NORMAL")
@@ -158,10 +182,10 @@ class WorkoutViewModel(
     fun addSet(exerciseId: Long) {
         val session = activeSession.value ?: return
         val currentSets = exerciseGroups.value.find { it.exercise.id == exerciseId }?.sets ?: emptyList()
-        val lastSet = currentSets.lastOrNull()
-        val weight = lastSet?.weightKg ?: 60.0
-        val reps = lastSet?.reps ?: 8
         val nextOrder = currentSets.size + 1
+        val lastSet = currentSets.lastOrNull()
+        val weight = lastSet?.weightKg ?: 0.0
+        val reps = lastSet?.reps ?: 8
 
         viewModelScope.launch {
             repository.addSet(session.id, exerciseId, weight, reps, nextOrder, "NORMAL")

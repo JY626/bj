@@ -49,6 +49,15 @@ class WorkoutRepository(
     fun getExerciseHistory(exerciseId: Long): Flow<List<WorkoutSetEntity>> =
         workoutDao.getHistoryForExercise(exerciseId)
 
+    suspend fun getPreviousSessionSetsForExercise(exerciseId: Long, currentSessionId: Long): Map<Int, WorkoutSetEntity> {
+        val history = workoutDao.getHistoricalCompletedSets(exerciseId, currentSessionId)
+        if (history.isEmpty()) return emptyMap()
+
+        val lastSessionId = history.first().sessionId
+        val setsFromLastSession = history.filter { it.sessionId == lastSessionId }
+        return setsFromLastSession.associateBy { it.setOrder }
+    }
+
     suspend fun addSet(
         sessionId: Long,
         exerciseId: Long,

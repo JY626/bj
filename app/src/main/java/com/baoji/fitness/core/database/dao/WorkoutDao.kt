@@ -40,6 +40,9 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY completedAt DESC LIMIT :limit")
     suspend fun getLastCompletedSetsForExercise(exerciseId: Long, limit: Int = 10): List<WorkoutSetEntity>
 
+    @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 AND sessionId != :currentSessionId ORDER BY completedAt DESC, id DESC")
+    suspend fun getHistoricalCompletedSets(exerciseId: Long, currentSessionId: Long): List<WorkoutSetEntity>
+
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY completedAt ASC")
     fun getHistoryForExercise(exerciseId: Long): Flow<List<WorkoutSetEntity>>
 

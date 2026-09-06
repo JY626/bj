@@ -307,4 +307,38 @@ object LucideIcons {
             }
         }.build()
     }
+
+    // 12. Calendar
+    val Calendar: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "LucideCalendar",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(8f, 2f)
+                lineTo(8f, 6f)
+                moveTo(16f, 2f)
+                lineTo(16f, 6f)
+                moveTo(3f, 10f)
+                lineTo(21f, 10f)
+                moveTo(5f, 4f)
+                lineTo(19f, 4f)
+                arcTo(2f, 2f, 0f, false, true, 21f, 6f)
+                lineTo(21f, 20f)
+                arcTo(2f, 2f, 0f, false, true, 19f, 22f)
+                lineTo(5f, 22f)
+                arcTo(2f, 2f, 0f, false, true, 3f, 20f)
+                lineTo(3f, 6f)
+                arcTo(2f, 2f, 0f, false, true, 5f, 4f)
+            }
+        }.build()
+    }
 }
