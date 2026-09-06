@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import com.baoji.fitness.core.theme.AppleBlack
 import com.baoji.fitness.core.theme.AppleCautionOrange
 import com.baoji.fitness.core.theme.AppleFitnessGreen
-import com.baoji.fitness.core.theme.AppleGray4
 import com.baoji.fitness.core.theme.AppleGray5
 import com.baoji.fitness.core.theme.AppleGray6
 import com.baoji.fitness.core.theme.AppleHairline
@@ -51,10 +49,10 @@ fun AnalyticsScreen(
     viewModel: AnalyticsViewModel,
     modifier: Modifier = Modifier
 ) {
-    val selectedExercise by viewModel.selectedExercise.collectAsState()
-    val e1rmHistory by viewModel.e1rmHistory.collectAsState()
+    val exercises by viewModel.exercises.collectAsState()
+    val selectedExerciseId by viewModel.selectedExerciseId.collectAsState()
+    val analyticsState by viewModel.analyticsState.collectAsState()
     val muscleVolumes by viewModel.weeklyMuscleVolumes.collectAsState()
-    val advice = viewModel.currentProgressionAdvice
 
     LazyColumn(
         modifier = modifier
@@ -84,26 +82,25 @@ fun AnalyticsScreen(
             }
         }
 
-        // Exercise Filter Chips
+        // Dynamic Exercise Filter Chips from Database
         item {
-            val chips = listOf("平板杠铃卧推", "传统杠铃后深蹲", "罗马尼亚硬拉", "站姿杠铃推举")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                chips.forEach { name ->
-                    val isSelected = (name == selectedExercise)
+                exercises.forEach { ex ->
+                    val isSelected = (ex.id == selectedExerciseId)
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSelected) Color.White else AppleGray6)
-                            .clickable { viewModel.selectExercise(name) }
+                            .clickable { viewModel.selectExercise(ex.id) }
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = name,
+                            text = ex.name,
                             fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSelected) Color.Black else AppleTextSecondary
@@ -141,7 +138,7 @@ fun AnalyticsScreen(
                             modifier = Modifier.padding(top = 2.dp)
                         ) {
                             Text(
-                                text = "98.5",
+                                text = if (analyticsState.currentE1RM > 0) "${analyticsState.currentE1RM}" else "--",
                                 fontSize = 32.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
@@ -153,7 +150,7 @@ fun AnalyticsScreen(
                                 color = AppleTextSecondary
                             )
                             Text(
-                                text = "↑ 6.5% 本周期",
+                                text = analyticsState.percentageIncreaseText,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = AppleFitnessGreen
@@ -168,7 +165,7 @@ fun AnalyticsScreen(
                             color = AppleTextSecondary
                         )
                         Text(
-                            text = "82.5 kg × 6",
+                            text = analyticsState.bestSetText,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.Monospace,
@@ -179,13 +176,31 @@ fun AnalyticsScreen(
                 }
 
                 // Minimalist Canvas Line Chart
-                OverloadCanvasChart(
-                    data = e1rmHistory.map { it.e1rm },
-                    labels = e1rmHistory.map { it.weekLabel },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(130.dp)
-                )
+                if (analyticsState.points.isNotEmpty()) {
+                    OverloadCanvasChart(
+                        points = analyticsState.points,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(AppleGray5),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "暂无该动作历史完成组，在训练中打勾记录后将自动绘制",
+                            fontSize = 11.sp,
+                            color = AppleTextTertiary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -219,36 +234,29 @@ fun AnalyticsScreen(
                         )
                     }
                     Text(
-                        text = "正常进展中",
+                        text = "数据实时同步中",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = AppleFitnessGreen
                     )
                 }
 
-                // Muscle Group Bars
+                // Muscle Group Bars from Repository
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    VolumeProgressBar(
-                        muscle = "胸部 (Chest)",
-                        current = 14,
-                        target = 18,
-                        color = AppleFitnessGreen,
-                        label = "适中"
-                    )
-                    VolumeProgressBar(
-                        muscle = "背部 (Back)",
-                        current = 8,
-                        target = 14,
-                        color = AppleCautionOrange,
-                        label = "低于有效容量"
-                    )
-                    VolumeProgressBar(
-                        muscle = "腿部 (Legs)",
-                        current = 16,
-                        target = 20,
-                        color = Color.White,
-                        label = "接近上限"
-                    )
+                    muscleVolumes.forEach { status ->
+                        val color = when {
+                            status.completedSets < status.mev -> AppleCautionOrange
+                            status.completedSets <= status.mav -> AppleFitnessGreen
+                            else -> Color.White
+                        }
+                        VolumeProgressBar(
+                            muscle = status.muscleGroup,
+                            current = status.completedSets,
+                            target = status.mav,
+                            color = color,
+                            label = status.statusText
+                        )
+                    }
                 }
             }
         }
@@ -272,7 +280,7 @@ fun AnalyticsScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = advice.message,
+                    text = analyticsState.adviceMessage,
                     fontSize = 13.sp,
                     color = AppleTextPrimary,
                     lineHeight = 18.sp
@@ -294,7 +302,8 @@ private fun VolumeProgressBar(
     color: Color,
     label: String
 ) {
-    val fraction = (current.toFloat() / target).coerceIn(0f, 1f)
+    val safeTarget = if (target > 0) target else 16
+    val fraction = (current.toFloat() / safeTarget).coerceIn(0f, 1f)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -302,7 +311,7 @@ private fun VolumeProgressBar(
         ) {
             Text(text = muscle, fontSize = 12.sp, color = AppleTextPrimary)
             Text(
-                text = "$current / $target 组 · $label",
+                text = "$current / $safeTarget 组 · $label",
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 color = color
@@ -328,19 +337,19 @@ private fun VolumeProgressBar(
 
 @Composable
 private fun OverloadCanvasChart(
-    data: List<Double>,
-    labels: List<String>,
+    points: List<OverloadDataPoint>,
     modifier: Modifier = Modifier
 ) {
-    if (data.isEmpty()) return
+    if (points.isEmpty()) return
 
-    val min = (data.minOrNull() ?: 80.0) - 5.0
-    val max = (data.maxOrNull() ?: 100.0) + 5.0
+    val values = points.map { it.e1rm }
+    val min = (values.minOrNull() ?: 60.0) - 5.0
+    val max = (values.maxOrNull() ?: 100.0) + 5.0
 
     Canvas(modifier = modifier) {
         val w = size.width
-        val h = size.height - 24f // leave space for bottom labels
-        val stepX = w / (data.size - 1)
+        val h = size.height - 24f // reserve space for bottom labels
+        val stepX = if (points.size > 1) w / (points.size - 1) else w / 2
 
         // Draw horizontal subtle grid lines
         for (i in 0..3) {
@@ -353,36 +362,38 @@ private fun OverloadCanvasChart(
             )
         }
 
-        // Draw Line Path
-        val path = Path()
-        data.forEachIndexed { i, valD ->
-            val x = i * stepX
-            val normY = (valD - min) / (max - min)
-            val y = (h - normY * h).toFloat()
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        // Draw Line Path if 2 or more points
+        if (points.size > 1) {
+            val path = Path()
+            points.forEachIndexed { i, pt ->
+                val x = i * stepX
+                val normY = (pt.e1rm - min) / (max - min)
+                val y = (h - normY * h).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+
+            drawPath(
+                path = path,
+                color = AppleFitnessGreen,
+                style = Stroke(width = 5f, cap = StrokeCap.Round)
+            )
         }
 
-        drawPath(
-            path = path,
-            color = AppleFitnessGreen,
-            style = Stroke(width = 5f, cap = StrokeCap.Round)
-        )
-
-        // Draw Points
-        data.forEachIndexed { i, valD ->
-            val x = i * stepX
-            val normY = (valD - min) / (max - min)
+        // Draw Points & PR Highlights
+        points.forEachIndexed { i, pt ->
+            val x = if (points.size > 1) i * stepX else w / 2
+            val normY = (pt.e1rm - min) / (max - min)
             val y = (h - normY * h).toFloat()
-            val isLast = (i == data.size - 1)
+            val isLast = (i == points.size - 1)
 
             drawCircle(
-                color = if (isLast) AppleFitnessGreen else AppleGray6,
-                radius = if (isLast) 10f else 6f,
+                color = if (pt.isPR) AppleFitnessGreen else AppleGray6,
+                radius = if (pt.isPR || isLast) 9f else 6f,
                 center = Offset(x, y)
             )
             drawCircle(
-                color = if (isLast) Color.White else AppleFitnessGreen,
-                radius = if (isLast) 5f else 3f,
+                color = if (pt.isPR) Color.White else AppleFitnessGreen,
+                radius = if (pt.isPR || isLast) 4.5f else 3f,
                 center = Offset(x, y)
             )
         }

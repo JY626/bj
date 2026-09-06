@@ -124,6 +124,27 @@ class WorkoutViewModel(
         }
     }
 
+    val allExercises = repository.getAllExercises()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addExerciseToSession(exerciseId: Long) {
+        val session = activeSession.value ?: return
+        viewModelScope.launch {
+            val exercise = allExercises.value.find { it.id == exerciseId }
+            val defaultWeight = if ((exercise?.personalRecordWeight ?: 0.0) > 0.0) {
+                exercise!!.personalRecordWeight
+            } else 40.0
+            val defaultReps = if ((exercise?.personalRecordReps ?: 0) > 0) {
+                exercise!!.personalRecordReps
+            } else 8
+
+            // Insert 3 initial sets for this newly added exercise
+            repository.addSet(session.id, exerciseId, defaultWeight, defaultReps, 1, "NORMAL")
+            repository.addSet(session.id, exerciseId, defaultWeight, defaultReps, 2, "NORMAL")
+            repository.addSet(session.id, exerciseId, defaultWeight, defaultReps, 3, "NORMAL")
+        }
+    }
+
     fun addSet(exerciseId: Long) {
         val session = activeSession.value ?: return
         val currentSets = exerciseGroups.value.find { it.exercise.id == exerciseId }?.sets ?: emptyList()

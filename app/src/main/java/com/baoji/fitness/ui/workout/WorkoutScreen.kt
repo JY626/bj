@@ -3,6 +3,7 @@ package com.baoji.fitness.ui.workout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +14,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +48,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.core.designsystem.icons.LucideIcons
 import com.baoji.fitness.core.theme.AppleBlack
@@ -53,6 +64,7 @@ import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.ui.workout.components.RestTimerCapsule
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutScreen(
     viewModel: WorkoutViewModel,
@@ -61,8 +73,14 @@ fun WorkoutScreen(
 ) {
     val activeSession by viewModel.activeSession.collectAsState()
     val exerciseGroups by viewModel.exerciseGroups.collectAsState()
+    val allExercises by viewModel.allExercises.collectAsState()
     val restSeconds by viewModel.restSecondsLeft.collectAsState()
     val isTimerVisible by viewModel.isRestTimerVisible.collectAsState()
+
+    val haptic = LocalHapticFeedback.current
+
+    var showAddExerciseSheet by remember { mutableStateOf(false) }
+    var showSummaryDialog by remember { mutableStateOf(false) }
 
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
     val totalVolume = completedSets.sumOf { it.weightKg * it.reps }.toInt()
@@ -108,7 +126,10 @@ fun WorkoutScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .background(AppleFitnessGreen)
-                            .clickable { viewModel.finishCurrentWorkout() }
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                showSummaryDialog = true
+                            }
                             .padding(horizontal = 16.dp, vertical = 7.dp)
                     ) {
                         Text(
@@ -195,10 +216,51 @@ fun WorkoutScreen(
             items(exerciseGroups) { group ->
                 ExerciseCard(
                     group = group,
-                    onToggleSet = { viewModel.toggleSetCompletion(it) },
+                    onToggleSet = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.toggleSetCompletion(it)
+                    },
                     onUpdateSet = { set, w, r -> viewModel.updateSet(set, w, r) },
-                    onAddSet = { viewModel.addSet(group.exercise.id) }
+                    onAddSet = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.addSet(group.exercise.id)
+                    }
                 )
+            }
+
+            // 5. Add Exercise Button
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(AppleGray6)
+                        .border(1.dp, AppleHairline, RoundedCornerShape(20.dp))
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showAddExerciseSheet = true
+                        }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "从动作库添加动作",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleFitnessGreen
+                        )
+                    }
+                }
             }
 
             // Bottom Spacing for Tab Bar and Rest Timer
@@ -211,10 +273,42 @@ fun WorkoutScreen(
         RestTimerCapsule(
             visible = isTimerVisible,
             secondsLeft = restSeconds,
-            onAdd30s = { viewModel.add30sRest() },
-            onSkip = { viewModel.skipRestTimer() },
+            onAdd30s = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                viewModel.add30sRest()
+            },
+            onSkip = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                viewModel.skipRestTimer()
+            },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // Add Exercise Bottom Sheet
+        if (showAddExerciseSheet) {
+            AddExerciseBottomSheet(
+                allExercises = allExercises,
+                onDismiss = { showAddExerciseSheet = false },
+                onExerciseSelected = { exerciseId ->
+                    viewModel.addExerciseToSession(exerciseId)
+                    showAddExerciseSheet = false
+                }
+            )
+        }
+
+        // Workout Completion Summary Dialog
+        if (showSummaryDialog) {
+            WorkoutSummaryDialog(
+                totalVolumeKg = totalVolume,
+                completedSetsCount = completedSets.size,
+                durationText = "28:45",
+                onConfirm = {
+                    viewModel.finishCurrentWorkout()
+                    showSummaryDialog = false
+                },
+                onDismiss = { showSummaryDialog = false }
+            )
+        }
     }
 }
 
@@ -512,6 +606,284 @@ private fun SetRowItem(
                         contentDescription = null,
                         tint = Color.Black,
                         modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddExerciseBottomSheet(
+    allExercises: List<ExerciseEntity>,
+    onDismiss: () -> Unit,
+    onExerciseSelected: (Long) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedMuscle by remember { mutableStateOf("全部") }
+
+    val muscles = listOf("全部", "胸部", "背部", "腿部", "肩部", "手臂")
+
+    val filtered = allExercises.filter { ex ->
+        val matchesMuscle = (selectedMuscle == "全部" || ex.targetMuscle == selectedMuscle)
+        val matchesSearch = (searchQuery.isBlank() || ex.name.contains(searchQuery, ignoreCase = true))
+        matchesMuscle && matchesSearch
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppleGray6,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(AppleGray4)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "添加动作至今日训练",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppleTextPrimary
+            )
+
+            // Search Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppleGray5)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    textStyle = TextStyle(color = AppleTextPrimary, fontSize = 13.sp),
+                    cursorBrush = SolidColor(AppleFitnessGreen),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "搜索动作名称或部位...",
+                                color = AppleTextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+
+            // Muscle category pills
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                muscles.forEach { muscle ->
+                    val isSelected = (muscle == selectedMuscle)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) Color.White else AppleGray5)
+                            .clickable { selectedMuscle = muscle }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = muscle,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.Black else AppleTextSecondary
+                        )
+                    }
+                }
+            }
+
+            // Exercise List
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(360.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(filtered) { exercise ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onExerciseSelected(exercise.id) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = exercise.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppleTextPrimary
+                            )
+                            Text(
+                                text = "${exercise.targetMuscle} · ${exercise.equipment}",
+                                fontSize = 11.sp,
+                                color = AppleTextSecondary
+                            )
+                        }
+
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    HorizontalDivider(color = AppleHairline, thickness = 0.5.dp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkoutSummaryDialog(
+    totalVolumeKg: Int,
+    completedSetsCount: Int,
+    durationText: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(AppleGray6)
+                .border(1.dp, AppleHairline, RoundedCornerShape(28.dp))
+                .padding(22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Checkmark Trophy Badge
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(AppleFitnessGreen.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = LucideIcons.Check,
+                    contentDescription = null,
+                    tint = AppleFitnessGreen,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "训练圆满完成！",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppleTextPrimary
+                )
+                Text(
+                    text = "数据已同步沉淀至渐进负荷模型",
+                    fontSize = 12.sp,
+                    color = AppleTextSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
+            // Summary Stats Strip
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AppleGray5)
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "总用时", fontSize = 10.sp, color = AppleTextSecondary)
+                    Text(
+                        text = durationText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleTextPrimary
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "总容量", fontSize = 10.sp, color = AppleTextSecondary)
+                    Text(
+                        text = "$totalVolumeKg kg",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleFitnessGreen
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "完成组数", fontSize = 10.sp, color = AppleTextSecondary)
+                    Text(
+                        text = "$completedSetsCount 组",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleTextPrimary
+                    )
+                }
+            }
+
+            // Actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleGray5)
+                        .clickable { onDismiss() }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "继续训练",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = AppleTextSecondary
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleFitnessGreen)
+                        .clickable { onConfirm() }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "保存并归档",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
                 }
             }
