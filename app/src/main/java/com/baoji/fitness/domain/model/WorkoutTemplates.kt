@@ -13,71 +13,57 @@ data class WorkoutRoutineTemplate(
 }
 
 object PresetTemplates {
-    val PUSH = WorkoutRoutineTemplate(
-        id = "PUSH",
-        name = "推力日 (Push)",
-        subtitle = "胸部 · 三角肌前中束 · 肱三头肌",
+    // DAY 1: PUSH DAY 推日 (胸 肩 三头)
+    val DAY1_PUSH = WorkoutRoutineTemplate(
+        id = "DAY1_PUSH",
+        name = "DAY 1 · 推日 (胸 肩 三头)",
+        subtitle = "上斜卧推 · 卧推 · 杠铃肩推 · 侧平飞鸟 · 三头",
         targetMuscles = "胸部, 肩部, 手臂",
         defaultExerciseNames = listOf(
-            "平板杠铃卧推",
-            "30° 上斜哑铃卧推",
-            "站姿杠铃推举",
-            "绳索三头下压"
+            "上斜卧推",
+            "卧推",
+            "杠铃肩推",
+            "侧平飞鸟",
+            "三头下压"
         )
     )
 
-    val PULL = WorkoutRoutineTemplate(
-        id = "PULL",
-        name = "拉力日 (Pull)",
-        subtitle = "背阔肌 · 中下斜方肌 · 肱二头肌",
-        targetMuscles = "背部, 手臂",
+    // DAY 2: PULL DAY 拉日 (背 二头)
+    val DAY2_PULL = WorkoutRoutineTemplate(
+        id = "DAY2_PULL",
+        name = "DAY 2 · 拉日 (背 二头)",
+        subtitle = "硬拉 · 引体向上 · 划船 · 后束飞鸟 · 面拉 · 二头弯举",
+        targetMuscles = "背部, 肩部, 手臂",
         defaultExerciseNames = listOf(
-            "标准引体向上",
-            "杠铃俯身划船",
-            "宽握高位下拉",
-            "直杆杠铃弯举"
+            "硬拉",
+            "引体向上",
+            "划船",
+            "后束飞鸟",
+            "面拉",
+            "二头弯举"
         )
     )
 
-    val LEGS = WorkoutRoutineTemplate(
-        id = "LEGS",
-        name = "腿部日 (Legs)",
-        subtitle = "股四头肌 · 腘绳肌 · 臀大肌",
-        targetMuscles = "腿部",
+    // DAY 3: 腿 + 外形补强
+    val DAY3_LEGS_WEAK = WorkoutRoutineTemplate(
+        id = "DAY3_LEGS_WEAK",
+        name = "DAY 3 · 腿 + 外形补强",
+        subtitle = "深蹲 · 杠铃肩推 · 面拉 · 侧平飞鸟 · 腹肌",
+        targetMuscles = "腿部, 肩部, 核心",
         defaultExerciseNames = listOf(
-            "传统杠铃后深蹲",
-            "罗马尼亚硬拉 (RDL)",
-            "45° 倒蹬机腿举",
-            "坐姿腿屈伸"
+            "深蹲",
+            "杠铃肩推",
+            "面拉",
+            "侧平飞鸟",
+            "腹肌训练"
         )
     )
 
-    val UPPER = WorkoutRoutineTemplate(
-        id = "UPPER",
-        name = "上肢综合 (Upper)",
-        subtitle = "胸 · 背 · 肩 · 手臂全面刺激",
-        targetMuscles = "胸部, 背部, 肩部, 手臂",
-        defaultExerciseNames = listOf(
-            "平板杠铃卧推",
-            "宽握高位下拉",
-            "哑铃侧平举",
-            "绳索三头下压"
-        )
-    )
-
-    val LOWER = WorkoutRoutineTemplate(
-        id = "LOWER",
-        name = "下肢综合 (Lower)",
-        subtitle = "深蹲主导与后侧链强化",
-        targetMuscles = "腿部",
-        defaultExerciseNames = listOf(
-            "传统杠铃后深蹲",
-            "罗马尼亚硬拉 (RDL)",
-            "俯卧腿弯举",
-            "45° 倒蹬机腿举"
-        )
-    )
-
-    val allTemplates = listOf(PUSH, PULL, LEGS, UPPER, LOWER)
+    val allTemplates = listOf(DAY1_PUSH, DAY2_PULL, DAY3_LEGS_WEAK)
     val all = allTemplates
+
+    // 兼容别名
+    val PUSH = DAY1_PUSH
+    val PULL = DAY2_PULL
+    val LEGS = DAY3_LEGS_WEAK
 }

@@ -116,7 +116,30 @@ class WorkoutViewModel(
             val exerciseMap = exercises.associateBy { it.name }
 
             template.defaultExerciseNames.forEach { exerciseName ->
-                val exercise = exerciseMap[exerciseName] ?: exercises.find { it.name.contains(exerciseName) }
+                var exercise = exerciseMap[exerciseName]
+                    ?: exercises.find { it.name.contains(exerciseName) || exerciseName.contains(it.name) }
+
+                if (exercise == null) {
+                    val targetMuscle = when {
+                        exerciseName.contains("卧推") || exerciseName.contains("胸") -> "胸部"
+                        exerciseName.contains("硬拉") || exerciseName.contains("引体") || exerciseName.contains("划船") || exerciseName.contains("背") -> "背部"
+                        exerciseName.contains("深蹲") || exerciseName.contains("腿") -> "腿部"
+                        exerciseName.contains("肩推") || exerciseName.contains("飞鸟") || exerciseName.contains("面拉") || exerciseName.contains("肩") -> "肩部"
+                        exerciseName.contains("二头") || exerciseName.contains("三头") || exerciseName.contains("手臂") -> "手臂"
+                        exerciseName.contains("腹肌") || exerciseName.contains("核心") -> "核心"
+                        else -> "全身"
+                    }
+                    val newEntity = ExerciseEntity(
+                        name = exerciseName,
+                        targetMuscle = targetMuscle,
+                        equipment = "自由重量",
+                        personalRecordWeight = 0.0,
+                        personalRecordReps = 0
+                    )
+                    val newId = repository.insertExercise(newEntity)
+                    exercise = newEntity.copy(id = newId)
+                }
+
                 if (exercise != null) {
                     val prevSets = repository.getPreviousSessionSetsForExercise(exercise.id, sessionId)
                     val defaultWeight = prevSets[1]?.weightKg ?: 0.0
@@ -138,12 +161,10 @@ class WorkoutViewModel(
 
     fun resetCurrentSession() {
         val session = activeSession.value ?: return
-        val matchingTemplate = PresetTemplates.allTemplates.find { it.name == session.title }
-        if (matchingTemplate != null) {
-            startNewWorkoutFromTemplate(matchingTemplate)
-        } else {
-            startCustomWorkout(session.title)
-        }
+        val matchingTemplate = PresetTemplates.allTemplates.find {
+            it.name == session.title || session.title.contains(it.name) || it.name.contains(session.title)
+        } ?: PresetTemplates.DAY1_PUSH
+        startNewWorkoutFromTemplate(matchingTemplate)
     }
 
     fun toggleSetCompletion(set: WorkoutSetEntity) {

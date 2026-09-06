@@ -12,25 +12,19 @@ class WorkoutTemplateAndBenchmarkTest {
     @Test
     fun testPresetTemplatesIntegrity() {
         val templates = PresetTemplates.all
-        assertEquals(5, templates.size)
+        assertEquals(3, templates.size)
 
-        val push = PresetTemplates.PUSH
-        assertEquals("推力日 (Push)", push.title)
-        assertTrue(push.exercises.contains("平板杠铃卧推"))
+        val day1 = PresetTemplates.DAY1_PUSH
+        assertEquals("DAY 1 · 推日 (胸 肩 三头)", day1.title)
+        assertEquals(listOf("上斜卧推", "卧推", "杠铃肩推", "侧平飞鸟", "三头下压"), day1.exercises)
 
-        val pull = PresetTemplates.PULL
-        assertEquals("拉力日 (Pull)", pull.title)
-        assertTrue(pull.exercises.contains("标准引体向上"))
+        val day2 = PresetTemplates.DAY2_PULL
+        assertEquals("DAY 2 · 拉日 (背 二头)", day2.title)
+        assertEquals(listOf("硬拉", "引体向上", "划船", "后束飞鸟", "面拉", "二头弯举"), day2.exercises)
 
-        val legs = PresetTemplates.LEGS
-        assertEquals("腿部日 (Legs)", legs.title)
-        assertTrue(legs.exercises.contains("传统杠铃后深蹲"))
-
-        val upper = PresetTemplates.UPPER
-        assertEquals("上肢综合 (Upper)", upper.title)
-
-        val lower = PresetTemplates.LOWER
-        assertEquals("下肢综合 (Lower)", lower.title)
+        val day3 = PresetTemplates.DAY3_LEGS_WEAK
+        assertEquals("DAY 3 · 腿 + 外形补强", day3.title)
+        assertEquals(listOf("深蹲", "杠铃肩推", "面拉", "侧平飞鸟", "腹肌训练"), day3.exercises)
     }
 
     @Test

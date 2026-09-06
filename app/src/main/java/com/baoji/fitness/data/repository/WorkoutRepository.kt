@@ -24,6 +24,8 @@ class WorkoutRepository(
 
     fun getAllExercises(): Flow<List<ExerciseEntity>> = exerciseDao.getAllExercises()
 
+    suspend fun insertExercise(exercise: ExerciseEntity): Long = exerciseDao.insertExercise(exercise)
+
     suspend fun startNewSession(title: String = "自由推力训练"): Long {
         workoutDao.closeAllActiveSessions()
         val session = WorkoutSessionEntity(
