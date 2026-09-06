@@ -60,6 +60,20 @@ class WorkoutRepository(
         return setsFromLastSession.associateBy { it.setOrder }
     }
 
+    suspend fun getExerciseById(exerciseId: Long): ExerciseEntity? =
+        exerciseDao.getExerciseById(exerciseId)
+
+    suspend fun removeExerciseFromSession(sessionId: Long, exerciseId: Long) {
+        workoutDao.deleteSetsForExerciseInSession(sessionId, exerciseId)
+    }
+
+    suspend fun getPreviousExerciseIdsForRoutine(routineTitle: String): List<Long> {
+        val targetSession = workoutDao.getLatestCompletedSessionByTitle(routineTitle)
+            ?: workoutDao.getLatestSessionByTitle(routineTitle)
+            ?: return emptyList()
+        return workoutDao.getDistinctExerciseIdsForSession(targetSession.id)
+    }
+
     suspend fun addSet(
         sessionId: Long,
         exerciseId: Long,

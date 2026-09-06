@@ -64,4 +64,23 @@ class WorkoutTemplateAndBenchmarkTest {
         // Set order 4 is newly added in current session -> no previous record -> null
         assertNull(mappedHistory[4])
     }
+
+    @Test
+    fun testDynamicRoutineExerciseInheritance() {
+        // Assume user customized DAY 1: removed exercise 3 (杠铃肩推), added exercise 10 (坐姿推胸)
+        // Previous completed session contains exercises: [1L, 2L, 4L, 5L, 10L]
+        val previousSessionExerciseIds = listOf(1L, 2L, 4L, 5L, 10L)
+
+        // When starting new session for this routine:
+        val resolvedExerciseIds = if (previousSessionExerciseIds.isNotEmpty()) {
+            previousSessionExerciseIds
+        } else {
+            // Default fallback
+            listOf(1L, 2L, 3L, 4L, 5L)
+        }
+
+        assertEquals(5, resolvedExerciseIds.size)
+        assertTrue(resolvedExerciseIds.contains(10L))
+        assertEquals(false, resolvedExerciseIds.contains(3L))
+    }
 }

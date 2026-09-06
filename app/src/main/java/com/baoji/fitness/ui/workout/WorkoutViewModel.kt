@@ -112,43 +112,54 @@ class WorkoutViewModel(
     fun startNewWorkoutFromTemplate(template: WorkoutRoutineTemplate) {
         viewModelScope.launch {
             val sessionId = repository.startNewSession(template.name)
-            val exercises = repository.getAllExercises().first { it.isNotEmpty() }
-            val exerciseMap = exercises.associateBy { it.name }
 
-            template.defaultExerciseNames.forEach { exerciseName ->
-                var exercise = exerciseMap[exerciseName]
-                    ?: exercises.find { it.name.contains(exerciseName) || exerciseName.contains(it.name) }
+            // 核心功能：优先读取上一次该训练日实际做过的动作列表（动态记忆用户习惯）
+            val previousExerciseIds = repository.getPreviousExerciseIdsForRoutine(template.name)
 
-                if (exercise == null) {
-                    val targetMuscle = when {
-                        exerciseName.contains("卧推") || exerciseName.contains("胸") -> "胸部"
-                        exerciseName.contains("硬拉") || exerciseName.contains("引体") || exerciseName.contains("划船") || exerciseName.contains("背") -> "背部"
-                        exerciseName.contains("深蹲") || exerciseName.contains("腿") -> "腿部"
-                        exerciseName.contains("肩推") || exerciseName.contains("飞鸟") || exerciseName.contains("面拉") || exerciseName.contains("肩") -> "肩部"
-                        exerciseName.contains("二头") || exerciseName.contains("三头") || exerciseName.contains("手臂") -> "手臂"
-                        exerciseName.contains("腹肌") || exerciseName.contains("核心") -> "核心"
-                        else -> "全身"
+            val exercisesToUse: List<ExerciseEntity> = if (previousExerciseIds.isNotEmpty()) {
+                previousExerciseIds.mapNotNull { repository.getExerciseById(it) }
+            } else {
+                // 首次开始该训练日，使用默认模板动作初始化
+                val allExercises = repository.getAllExercises().first { it.isNotEmpty() }
+                val exerciseMap = allExercises.associateBy { it.name }
+
+                template.defaultExerciseNames.map { exerciseName ->
+                    var exercise = exerciseMap[exerciseName]
+                        ?: allExercises.find { it.name.contains(exerciseName) || exerciseName.contains(it.name) }
+
+                    if (exercise == null) {
+                        val targetMuscle = when {
+                            exerciseName.contains("卧推") || exerciseName.contains("胸") -> "胸部"
+                            exerciseName.contains("硬拉") || exerciseName.contains("引体") || exerciseName.contains("划船") || exerciseName.contains("背") -> "背部"
+                            exerciseName.contains("深蹲") || exerciseName.contains("腿") -> "腿部"
+                            exerciseName.contains("肩推") || exerciseName.contains("飞鸟") || exerciseName.contains("面拉") || exerciseName.contains("肩") -> "肩部"
+                            exerciseName.contains("二头") || exerciseName.contains("三头") || exerciseName.contains("手臂") -> "手臂"
+                            exerciseName.contains("腹肌") || exerciseName.contains("核心") -> "核心"
+                            else -> "全身"
+                        }
+                        val newEntity = ExerciseEntity(
+                            name = exerciseName,
+                            targetMuscle = targetMuscle,
+                            equipment = "自由重量",
+                            personalRecordWeight = 0.0,
+                            personalRecordReps = 0
+                        )
+                        val newId = repository.insertExercise(newEntity)
+                        exercise = newEntity.copy(id = newId)
                     }
-                    val newEntity = ExerciseEntity(
-                        name = exerciseName,
-                        targetMuscle = targetMuscle,
-                        equipment = "自由重量",
-                        personalRecordWeight = 0.0,
-                        personalRecordReps = 0
-                    )
-                    val newId = repository.insertExercise(newEntity)
-                    exercise = newEntity.copy(id = newId)
+                    exercise
                 }
+            }
 
-                if (exercise != null) {
-                    val prevSets = repository.getPreviousSessionSetsForExercise(exercise.id, sessionId)
-                    val defaultWeight = prevSets[1]?.weightKg ?: 0.0
-                    val defaultReps = prevSets[1]?.reps ?: 10
+            // 对选定的动作列表（继承自上次训练或首次默认），初始化 3 组并继承上一次各组真实成绩
+            exercisesToUse.forEach { exercise ->
+                val prevSets = repository.getPreviousSessionSetsForExercise(exercise.id, sessionId)
+                val defaultWeight = prevSets[1]?.weightKg ?: 0.0
+                val defaultReps = prevSets[1]?.reps ?: 10
 
-                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 1, "NORMAL")
-                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 2, "NORMAL")
-                    repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 3, "NORMAL")
-                }
+                repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 1, "NORMAL")
+                repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 2, "NORMAL")
+                repository.addSet(sessionId, exercise.id, defaultWeight, defaultReps, 3, "NORMAL")
             }
         }
     }
@@ -183,6 +194,13 @@ class WorkoutViewModel(
     fun updateSet(set: WorkoutSetEntity, weightKg: Double, reps: Int) {
         viewModelScope.launch {
             repository.updateSetWeightAndReps(set, weightKg, reps)
+        }
+    }
+
+    fun removeExerciseFromSession(exerciseId: Long) {
+        val session = activeSession.value ?: return
+        viewModelScope.launch {
+            repository.removeExerciseFromSession(session.id, exerciseId)
         }
     }
 

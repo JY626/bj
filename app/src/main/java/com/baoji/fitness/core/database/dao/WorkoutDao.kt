@@ -60,4 +60,16 @@ interface WorkoutDao {
 
     @Query("SELECT * FROM workout_sets WHERE completedAt >= :sinceTimestamp AND isCompleted = 1")
     fun getCompletedSetsSince(sinceTimestamp: Long): Flow<List<WorkoutSetEntity>>
+
+    @Query("SELECT * FROM workout_sessions WHERE title = :title AND status = 'COMPLETED' ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLatestCompletedSessionByTitle(title: String): WorkoutSessionEntity?
+
+    @Query("SELECT * FROM workout_sessions WHERE title = :title ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLatestSessionByTitle(title: String): WorkoutSessionEntity?
+
+    @Query("SELECT DISTINCT exerciseId FROM workout_sets WHERE sessionId = :sessionId ORDER BY id ASC")
+    suspend fun getDistinctExerciseIdsForSession(sessionId: Long): List<Long>
+
+    @Query("DELETE FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId")
+    suspend fun deleteSetsForExerciseInSession(sessionId: Long, exerciseId: Long)
 }

@@ -349,7 +349,7 @@ fun WorkoutScreen(
                                             color = AppleTextPrimary
                                         )
                                         Text(
-                                            text = "${template.focusSplit} · ${template.exercises.size} 个预设动作",
+                                            text = "${template.focusSplit} · 沿用上次动作与基准",
                                             fontSize = 11.sp,
                                             color = AppleTextSecondary
                                         )
@@ -382,6 +382,10 @@ fun WorkoutScreen(
                     onAddSet = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.addSet(group.exercise.id)
+                    },
+                    onRemoveExercise = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.removeExerciseFromSession(group.exercise.id)
                     }
                 )
             }
@@ -539,7 +543,8 @@ private fun ExerciseCard(
     group: ExerciseGroup,
     onToggleSet: (WorkoutSetEntity) -> Unit,
     onOpenSetEditor: (WorkoutSetEntity) -> Unit,
-    onAddSet: () -> Unit
+    onAddSet: () -> Unit,
+    onRemoveExercise: () -> Unit
 ) {
     val benchmarkSummary = group.benchmarkSummary
     val benchmarkSub = if (benchmarkSummary != "-") {
@@ -563,7 +568,7 @@ private fun ExerciseCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -595,23 +600,21 @@ private fun ExerciseCard(
                 )
             }
 
-            // Replace action
-            Row(
+            // Remove exercise action
+            Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(AppleGray5)
-                    .clickable { /* replace action */ }
+                    .clickable { onRemoveExercise() }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = LucideIcons.RefreshCw,
-                    contentDescription = null,
-                    tint = AppleTextSecondary,
-                    modifier = Modifier.size(11.dp)
+                Text(
+                    text = "移除",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AppleSystemRed.copy(alpha = 0.9f)
                 )
-                Text(text = "替换", fontSize = 11.sp, color = AppleTextSecondary)
             }
         }
 
@@ -1370,9 +1373,9 @@ private fun RoutineTemplateBottomSheet(
                         color = AppleTextPrimary
                     )
                     Text(
-                        text = "切换至不同分化计划或创建自定义训练日",
+                        text = "动作组合将根据你上一次的实际训练自动更新记忆",
                         fontSize = 12.sp,
-                        color = AppleTextSecondary,
+                        color = AppleFitnessGreen,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -1405,7 +1408,7 @@ private fun RoutineTemplateBottomSheet(
                                 color = AppleTextPrimary
                             )
                             Text(
-                                text = "${template.focusSplit} · ${template.exercises.size} 个预设动作",
+                                text = "${template.focusSplit} · 沿用上次动作与基准",
                                 fontSize = 11.sp,
                                 color = AppleTextSecondary
                             )
