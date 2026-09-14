@@ -47,6 +47,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -99,6 +100,8 @@ fun WorkoutScreen(
     val currentDateText = remember(activeSession?.startTime) {
         dateFormat.format(Date(activeSession?.startTime ?: System.currentTimeMillis()))
     }
+    // 标题括号段在 22sp 下会挤爆右侧按钮，头部只显示短标题（如 "DAY 1 · 推日"），完整名在计划弹层里看
+    val headerTitle = (activeSession?.title ?: "今日训练").substringBefore("(").trim()
 
     // 容量口径：热身组不计入 Volume（与 RP 口径一致）；完成组数仍含热身
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
@@ -155,19 +158,20 @@ fun WorkoutScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = currentDateText.uppercase(),
+                            text = currentDateText,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AppleFitnessGreen,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = activeSession?.title ?: "今日训练",
+                            text = headerTitle,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppleTextPrimary,
                             letterSpacing = (-0.5).sp,
-                            maxLines = 1
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
