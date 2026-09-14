@@ -2,6 +2,7 @@ package com.baoji.fitness
 
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.domain.model.PresetTemplates
+import com.baoji.fitness.ui.workout.WorkoutViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -82,5 +83,21 @@ class WorkoutTemplateAndBenchmarkTest {
         assertEquals(5, resolvedExerciseIds.size)
         assertTrue(resolvedExerciseIds.contains(10L))
         assertEquals(false, resolvedExerciseIds.contains(3L))
+    }
+
+    @Test
+    fun testCheckInheritancePicksNextOpenSet() {
+        val done = WorkoutSetEntity(id = 1L, sessionId = 9L, exerciseId = 1L, setOrder = 1, weightKg = 82.5, reps = 8, isCompleted = true)
+        val sets = listOf(
+            done,
+            WorkoutSetEntity(id = 2L, sessionId = 9L, exerciseId = 1L, setOrder = 3, weightKg = 80.0, reps = 5),
+            WorkoutSetEntity(id = 3L, sessionId = 9L, exerciseId = 1L, setOrder = 2, weightKg = 80.0, reps = 5)
+        )
+        // 乱序列表中也应选 setOrder=2 的那组（id=3L），而非插入顺序的第一条（id=2L 是 setOrder=3）
+        assertEquals(3L, WorkoutViewModel.nextOpenSetAfter(sets, done)?.id)
+
+        // 后面无未完成组 -> null
+        val tailDone = done.copy(id = 3L, setOrder = 2, isCompleted = true)
+        assertEquals(null, WorkoutViewModel.nextOpenSetAfter(listOf(done.copy(isCompleted = true), tailDone), tailDone))
     }
 }

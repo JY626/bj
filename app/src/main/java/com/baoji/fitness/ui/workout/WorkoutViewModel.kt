@@ -183,10 +183,19 @@ class WorkoutViewModel(
             val newState = !set.isCompleted
             repository.completeSet(set, newState)
 
-            if (newState) {
+            // 取消勾选不再杀死正在跑的休息计时（之前改错组会顺手把计时弄丢）
+            if (newState && set.setType != "WARMUP") {
+                // 打勾即采用：本组重量/次数自动继承给同动作下一未完成组，
+                // 健身房 90% 的组不做改动，改了首组后续全部自动跟随。
+                val nextOpenSet = exerciseGroups.value
+                    .find { it.exercise.id == set.exerciseId }
+                    ?.sets
+                    ?.let { nextOpenSetAfter(it, set) }
+
+                if (nextOpenSet != null) {
+                    repository.updateSetWeightAndReps(nextOpenSet, set.weightKg, set.reps)
+                }
                 startRestTimer(90)
-            } else {
-                skipRestTimer()
             }
         }
     }
@@ -271,5 +280,13 @@ class WorkoutViewModel(
         _restSecondsLeft.value = 0
         _isRestTimerVisible.value = false
         timerJob?.cancel()
+    }
+
+    companion object {
+        /** 找同动作内 setOrder 大于刚完成组的第一条未完成组（打勾继承目标） */
+        fun nextOpenSetAfter(sets: List<WorkoutSetEntity>, justCompleted: WorkoutSetEntity): WorkoutSetEntity? =
+            sets.filter {
+                !it.isCompleted && it.id != justCompleted.id && it.setOrder > justCompleted.setOrder
+            }.minByOrNull { it.setOrder }
     }
 }

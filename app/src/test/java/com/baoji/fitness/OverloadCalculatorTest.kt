@@ -32,12 +32,11 @@ class OverloadCalculatorTest {
 
     @Test
     fun testDoubleProgressionDecision() {
-        // 8 reps reached target maximum at safe RPE -> recommend +2.5kg
+        // 8 reps reached target maximum (纯次数判定，RPE 参数已删除) -> recommend +2.5kg
         val adviceIncrease = OverloadCalculator.evaluateProgression(
             currentWeightKg = 80.0,
             currentReps = 8,
-            targetRepMax = 8,
-            rpe = 8.0
+            targetRepMax = 8
         )
         assertTrue(adviceIncrease.shouldIncreaseWeight)
         assertEquals(82.5, adviceIncrease.recommendedWeightKg, 0.01)

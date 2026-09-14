@@ -132,8 +132,7 @@ class AnalyticsViewModel(
         val advice = OverloadCalculator.evaluateProgression(
             currentWeightKg = latestSet.weightKg,
             currentReps = latestSet.reps,
-            targetRepMax = 8,
-            rpe = latestSet.rpe
+            targetRepMax = 8
         )
 
         val firstE1RM = points.firstOrNull()?.e1rm ?: maxHistoricalE1RM

@@ -139,6 +139,8 @@ class WorkoutRepository(
             val muscleCounts = mutableMapOf<String, Int>()
 
             for (s in sets) {
+                // 口径统一：热身组不计有效组数（与训练页 Volume 一致）
+                if (s.setType == "WARMUP") continue
                 val exercise = exerciseMap[s.exerciseId]
                 val muscle = exercise?.targetMuscle ?: "胸部"
                 muscleCounts[muscle] = (muscleCounts[muscle] ?: 0) + 1

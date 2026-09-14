@@ -1,25 +1,25 @@
 # Baoji (暴肌 / 宝肌) - Android 健身渐进式负荷与 AI 私教 App
 
 一款基于 **Kotlin + Jetpack Compose (Material 3)** 构建的现代化健身记录应用。
-专注于**极速训练记录、科学渐进式负荷量化、以及接入大模型私教**。界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
+专注于**极速训练记录、科学渐进式负荷量化、以及 AI 私教（规划中，当前为本地演示占位）**。界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
 
 ---
 
 ## 一、 核心功能特色
 
 1. **零延迟极速记录 (Zero-Friction Logging)**：
-   * 自动回填上周同动作记录（重量、次数）；
+   * 开练时自动回填上周同动作记录（重量、次数）；打勾后下一未完成组自动继承本组重量次数，全程零键盘；
    * 针对健身房疲劳场景的大触控区设计（48dp+）；
-   * 打勾即刻触发 Apple 质感震动反馈与实时容量（Volume kg）累加。
+   * 打勾即刻触发 Apple 质感震动反馈与实时容量（Volume kg）累加（热身组不计入容量）。
 2. **Apple Watch 风格悬浮组间休息胶囊 (Rest Timer Capsule)**：
    * 打勾后自动在底部浮起半透明高斯模糊胶囊，环形进度条倒计时，支持一键 `+30s` 与 `跳过`，不阻碍浏览后续动作。
 3. **渐进式负荷量化 (Progressive Overload Analytics)**：
    * **E1RM 极限拟合**：采用 Epley 经典公式 $1\text{RM} = \text{Weight} \times (1 + \text{Reps} / 30)$，以 Canvas 动态绘制力量突破曲线与 PR 标记；
    * **RP 周期容量监控**：量化每周胸/背/腿/肩/臂的有效组数，对照 MEV/MAV/MRV 科学阈值。
-   * **双重渐进协议**：智能判定加重节点（如 80kg x 8次达标 -> 建议首组冲击 82.5kg x 6次）。
-4. **AI 私教智能体搭档 (Apple Intelligence Style Coach)**：
-   * 伤病与器械被占时的自调节（Auto-regulation）动作替换与重量折算；
-   * 多模态视觉（Gemini Vision）拍照识别外卖/餐盘，拆解热量与蛋白质占比。
+   * **双重渐进协议**：基于前次首组真实数据纯次数判定加重节点（如 80kg x 8次达标 -> 建议首组冲击 82.5kg x 6次），实时显示在训练页顶部建议条；不依赖 RPE（从未采集该字段）。
+4. **AI 私教（⚠️ 未实现 · 本地演示占位）**：
+   * 教练对话页为写死的演示脚本，未接入任何大模型；伤病替换、拍照识别餐食均不可用；
+   * 接入真实 LLM 前，本页不作为功能承诺，仅供交互形态参考。
 5. **离线优先架构 (Offline-First)**：
    * 基于 Android Jetpack Room (SQLite) 数据库，健身房地下室弱网无痛运行。
 

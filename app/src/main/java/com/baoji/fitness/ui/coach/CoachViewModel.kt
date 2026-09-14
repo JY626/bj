@@ -32,7 +32,7 @@ class CoachViewModel : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(
-            ChatMessage.AssistantText("你好。我已经同步了你过去 32 天的推拉腿负荷数据。今天有什么需要调整？例如：器械被占用、某部位关节酸胀、或是拍摄饮食测算营养成分。"),
+            ChatMessage.AssistantText("⚠️ 演示模式：本页尚未接入真实大模型，以下对话为本地脚本示例。真实的加重建议请看训练页顶部的双重渐进建议条。"),
             ChatMessage.User("我今天右肩前束稍微有点刺痛感，而且深蹲架人满，帮我把原计划微调一下。"),
             ChatMessage.ActionableCard(
                 title = "右肩减压与动作替换建议",

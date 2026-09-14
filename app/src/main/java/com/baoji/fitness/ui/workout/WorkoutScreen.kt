@@ -28,9 +28,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,9 +64,11 @@ import com.baoji.fitness.core.theme.AppleSystemRed
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
+import com.baoji.fitness.domain.algorithm.OverloadCalculator
 import com.baoji.fitness.domain.model.PresetTemplates
 import com.baoji.fitness.domain.model.WorkoutRoutineTemplate
 import com.baoji.fitness.ui.workout.components.RestTimerCapsule
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,9 +100,39 @@ fun WorkoutScreen(
         dateFormat.format(Date(activeSession?.startTime ?: System.currentTimeMillis()))
     }
 
+    // 容量口径：热身组不计入 Volume（与 RP 口径一致）；完成组数仍含热身
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
-    val totalVolume = completedSets.sumOf { it.weightKg * it.reps }.toInt()
+    val totalVolume = completedSets
+        .filter { it.setType != "WARMUP" }
+        .sumOf { it.weightKg * it.reps }.toInt()
     val totalSetsCount = exerciseGroups.flatMap { it.sets }.size
+
+    // 用时：session 真实时钟（归档后取 endTime-startTime，进行中每秒自走）
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(activeSession?.id, activeSession?.endTime) {
+        while (activeSession?.endTime == null) {
+            nowMs = System.currentTimeMillis()
+            delay(1000)
+        }
+        nowMs = System.currentTimeMillis()
+    }
+    val durationText = activeSession?.let { session ->
+        val elapsed = ((session.endTime ?: nowMs) - session.startTime).coerceAtLeast(0L)
+        "%d:%02d".format(elapsed / 60000, (elapsed % 60000) / 1000)
+    } ?: "--:--"
+
+    // 加重建议：会话首个动作（主项）按双重渐进法，基于前次首组真实基准判定
+    val firstGroup = exerciseGroups.firstOrNull()
+    val prevFirstSet = firstGroup?.previousSessionSets?.get(1)
+        ?: firstGroup?.previousSessionSets?.values?.maxByOrNull { it.weightKg }
+    val suggestionText = when {
+        firstGroup == null -> "点左上角「计划」开始今日训练"
+        prevFirstSet != null && prevFirstSet.weightKg > 0 -> {
+            val advice = OverloadCalculator.evaluateProgression(prevFirstSet.weightKg, prevFirstSet.reps)
+            "${firstGroup.exercise.name}｜${advice.message}"
+        }
+        else -> "${firstGroup.exercise.name}｜首次训练，打勾直接采用，重量次数自动带到下一组"
+    }
 
     Box(
         modifier = modifier
@@ -222,7 +256,7 @@ fun WorkoutScreen(
                         .padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    MetricItem(label = "用时", value = "28:45")
+                    MetricItem(label = "用时", value = durationText)
                     MetricItem(label = "累计容量", value = "$totalVolume", unit = "kg")
                     MetricItem(
                         label = "完成组数",
@@ -232,7 +266,7 @@ fun WorkoutScreen(
                 }
             }
 
-            // 3. Apple Intelligence Suggestion Pill
+            // 3. 双重渐进建议条（真实数据：主项前次基准 → evaluateProgression）
             item {
                 Row(
                     modifier = Modifier
@@ -240,43 +274,29 @@ fun WorkoutScreen(
                         .clip(RoundedCornerShape(18.dp))
                         .background(AppleGray6)
                         .border(1.dp, AppleHairline, RoundedCornerShape(18.dp))
-                        .clickable { onNavigateToCoach() }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(AppleGray5),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(AppleGray5),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.Sparkles,
-                                contentDescription = null,
-                                tint = AppleFitnessGreen,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                        Text(
-                            text = "上周 80kg 达成 RPE 8，建议第2组加重至 82.5 kg",
-                            fontSize = 12.sp,
-                            color = AppleTextPrimary,
-                            maxLines = 1
+                        Icon(
+                            imageVector = LucideIcons.Sparkles,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
-
-                    Icon(
-                        imageVector = LucideIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = AppleTextSecondary,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        text = suggestionText,
+                        fontSize = 12.sp,
+                        color = AppleTextPrimary,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -480,7 +500,7 @@ fun WorkoutScreen(
             WorkoutSummaryDialog(
                 totalVolumeKg = totalVolume,
                 completedSetsCount = completedSets.size,
-                durationText = "28:45",
+                durationText = durationText,
                 onConfirm = {
                     viewModel.finishCurrentWorkout()
                     showSummaryDialog = false

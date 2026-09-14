@@ -25,17 +25,16 @@ object OverloadCalculator {
 
     /**
      * 双重渐进法决策 (Double Progression Protocol)
-     * 若在目标次数上限 (如 8次) 达成且 RPE <= 8.5，推荐提重 +2.5kg
+     * 纯次数判定：达到目标次数上限 (如 8次) 即推荐提重 +2.5kg。
+     * 不依赖 RPE —— 录入页从不采集 RPE，之前的默认值判定是空转逻辑，已删除。
      */
     fun evaluateProgression(
         currentWeightKg: Double,
         currentReps: Int,
-        targetRepMax: Int = 8,
-        rpe: Double? = null
+        targetRepMax: Int = 8
     ): ProgressionAdvice {
-        val safeRpe = rpe ?: 8.0
         return when {
-            currentReps >= targetRepMax && safeRpe <= 8.5 -> {
+            currentReps >= targetRepMax -> {
                 val nextWeight = currentWeightKg + 2.5
                 ProgressionAdvice(
                     shouldIncreaseWeight = true,
