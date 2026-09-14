@@ -100,10 +100,19 @@ class WorkoutViewModel(
         viewModelScope.launch {
             // One-shot check on initial startup: only bootstrap if no active session AND no prior sessions exist
             val currentActive = repository.getActiveSession().first()
-            if (currentActive == null) {
-                val allSessions = repository.getAllSessions().first()
-                if (allSessions.isEmpty()) {
-                    startNewWorkoutFromTemplate(PresetTemplates.PUSH)
+            when {
+                currentActive == null -> {
+                    val allSessions = repository.getAllSessions().first()
+                    if (allSessions.isEmpty()) {
+                        startNewWorkoutFromTemplate(PresetTemplates.PUSH)
+                    }
+                }
+                // 空壳会话（动作库为空时初始化挂死留下的残留，或历史 bug）按原标题重新填动作
+                repository.getSetsForSession(currentActive.id).first().isEmpty() -> {
+                    val matchingTemplate = PresetTemplates.allTemplates.firstOrNull {
+                        it.name == currentActive.title || currentActive.title.contains(it.name)
+                    } ?: PresetTemplates.PUSH
+                    startNewWorkoutFromTemplate(matchingTemplate)
                 }
             }
         }
@@ -248,7 +257,9 @@ class WorkoutViewModel(
 
     fun finishCurrentWorkout() {
         val session = activeSession.value ?: return
-        val sets = exerciseGroups.value.flatMap { it.sets }.filter { it.isCompleted }
+        // 口径与训练页一致：热身组不计入总容量
+        val sets = exerciseGroups.value.flatMap { it.sets }
+            .filter { it.isCompleted && it.setType != "WARMUP" }
         val totalVolume = sets.sumOf { it.weightKg * it.reps }
 
         viewModelScope.launch {
