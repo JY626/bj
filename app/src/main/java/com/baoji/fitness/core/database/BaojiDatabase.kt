@@ -51,11 +51,18 @@ abstract class BaojiDatabase : RoomDatabase() {
         private class DatabaseCallback(
             private val scope: CoroutineScope
         ) : RoomDatabase.Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
+            // 种子只走 onOpen + 空表检查这一条路径：
+            // fallbackToDestructiveMigration 重建数据库时不会触发 onCreate 回调，
+            // 在 onCreate 里播种会导致升级后动作库为空。onOpen 每次打开都跑，
+            // COUNT 检查保证幂等，将来再 bump 版本也不会漏种。
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
                 INSTANCE?.let { database ->
                     scope.launch(Dispatchers.IO) {
-                        populateDefaultExercises(database.exerciseDao())
+                        val dao = database.exerciseDao()
+                        if (dao.getExerciseCount() == 0) {
+                            populateDefaultExercises(dao)
+                        }
                     }
                 }
             }
