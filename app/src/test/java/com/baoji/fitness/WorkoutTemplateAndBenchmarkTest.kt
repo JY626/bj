@@ -16,16 +16,16 @@ class WorkoutTemplateAndBenchmarkTest {
         assertEquals(3, templates.size)
 
         val day1 = PresetTemplates.DAY1_PUSH
-        assertEquals("DAY 1 · 推日 (胸 肩 三头)", day1.title)
-        assertEquals(listOf("上斜卧推", "卧推", "杠铃肩推", "侧平飞鸟", "三头下压"), day1.exercises)
+        assertEquals("DAY 1 · 推日 (胸 肩)", day1.title)
+        assertEquals(listOf("上斜卧推", "卧推", "史密斯推肩", "侧平飞鸟"), day1.exercises)
 
         val day2 = PresetTemplates.DAY2_PULL
         assertEquals("DAY 2 · 拉日 (背 二头)", day2.title)
-        assertEquals(listOf("硬拉", "引体向上", "划船", "后束飞鸟", "面拉", "二头弯举"), day2.exercises)
+        assertEquals(listOf("硬拉", "高位下拉", "划船", "面拉", "二头弯举"), day2.exercises)
 
         val day3 = PresetTemplates.DAY3_LEGS_WEAK
         assertEquals("DAY 3 · 腿 + 外形补强", day3.title)
-        assertEquals(listOf("深蹲", "杠铃肩推", "面拉", "侧平飞鸟", "腹肌训练"), day3.exercises)
+        assertEquals(listOf("史密斯深蹲", "史密斯推肩", "面拉", "侧平飞鸟", "悬垂举腿"), day3.exercises)
     }
 
     @Test

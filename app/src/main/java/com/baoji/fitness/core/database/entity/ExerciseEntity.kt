@@ -12,6 +12,8 @@ data class ExerciseEntity(
     val secondaryMuscles: String = "",
     val equipment: String, // 杠铃, 哑铃, 绳索, 史密斯, 机械器械, 自重
     val isCustom: Boolean = false,
+    /** false = 自重/仅记次数（如悬垂举腿），录入 UI 隐藏重量步进 */
+    val trackWeight: Boolean = true,
     val personalRecordWeight: Double = 0.0,
     val personalRecordReps: Int = 0
 )

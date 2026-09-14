@@ -13,18 +13,17 @@ data class WorkoutRoutineTemplate(
 }
 
 object PresetTemplates {
-    // DAY 1: PUSH DAY 推日 (胸 肩 三头)
+    // DAY 1: PUSH DAY 推日 (胸 肩)
     val DAY1_PUSH = WorkoutRoutineTemplate(
         id = "DAY1_PUSH",
-        name = "DAY 1 · 推日 (胸 肩 三头)",
-        subtitle = "上斜卧推 · 卧推 · 杠铃肩推 · 侧平飞鸟 · 三头",
-        targetMuscles = "胸部, 肩部, 手臂",
+        name = "DAY 1 · 推日 (胸 肩)",
+        subtitle = "上斜卧推 · 卧推 · 史密斯推肩 · 侧平飞鸟",
+        targetMuscles = "胸部, 肩部",
         defaultExerciseNames = listOf(
             "上斜卧推",
             "卧推",
-            "杠铃肩推",
-            "侧平飞鸟",
-            "三头下压"
+            "史密斯推肩",
+            "侧平飞鸟"
         )
     )
 
@@ -32,13 +31,12 @@ object PresetTemplates {
     val DAY2_PULL = WorkoutRoutineTemplate(
         id = "DAY2_PULL",
         name = "DAY 2 · 拉日 (背 二头)",
-        subtitle = "硬拉 · 引体向上 · 划船 · 后束飞鸟 · 面拉 · 二头弯举",
+        subtitle = "硬拉 · 高位下拉 · 划船 · 面拉 · 二头弯举",
         targetMuscles = "背部, 肩部, 手臂",
         defaultExerciseNames = listOf(
             "硬拉",
-            "引体向上",
+            "高位下拉",
             "划船",
-            "后束飞鸟",
             "面拉",
             "二头弯举"
         )
@@ -48,14 +46,14 @@ object PresetTemplates {
     val DAY3_LEGS_WEAK = WorkoutRoutineTemplate(
         id = "DAY3_LEGS_WEAK",
         name = "DAY 3 · 腿 + 外形补强",
-        subtitle = "深蹲 · 杠铃肩推 · 面拉 · 侧平飞鸟 · 腹肌",
+        subtitle = "史密斯深蹲 · 史密斯推肩 · 面拉 · 侧平飞鸟 · 悬垂举腿",
         targetMuscles = "腿部, 肩部, 核心",
         defaultExerciseNames = listOf(
-            "深蹲",
-            "杠铃肩推",
+            "史密斯深蹲",
+            "史密斯推肩",
             "面拉",
             "侧平飞鸟",
-            "腹肌训练"
+            "悬垂举腿"
         )
     )
 

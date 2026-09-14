@@ -487,6 +487,7 @@ fun WorkoutScreen(
             QuickAdjustSetBottomSheet(
                 exerciseName = exercise.name,
                 set = set,
+                trackWeight = exercise.trackWeight,
                 onDismiss = { activeEditingSet = null },
                 onSave = { updatedWeight, updatedReps, updatedType ->
                     viewModel.updateSet(set.copy(setType = updatedType), updatedWeight, updatedReps)
@@ -651,7 +652,7 @@ private fun ExerciseCard(
         ) {
             Text(text = "组", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(0.9f), textAlign = TextAlign.Center)
             Text(text = "参考基准", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.8f), textAlign = TextAlign.Center)
-            Text(text = "重量(kg)", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.7f), textAlign = TextAlign.Center)
+            Text(text = if (group.exercise.trackWeight) "重量(kg)" else "负重", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.7f), textAlign = TextAlign.Center)
             Text(text = "次数", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
             Text(text = "完成", fontSize = 11.sp, color = AppleTextTertiary, modifier = Modifier.weight(1.2f), textAlign = TextAlign.Center)
         }
@@ -659,15 +660,18 @@ private fun ExerciseCard(
         // Sets Rows with stable keys
         group.sets.forEach { set ->
             val prevSet = group.previousSessionSets[set.setOrder]
-            val setBenchmarkText = if (prevSet != null && prevSet.weightKg > 0.0) {
-                "${formatWeight(prevSet.weightKg)} × ${prevSet.reps}"
-            } else {
-                "-"
+            val trackW = group.exercise.trackWeight
+            val setBenchmarkText = when {
+                prevSet == null -> "-"
+                trackW && prevSet.weightKg > 0.0 -> "${formatWeight(prevSet.weightKg)} × ${prevSet.reps}"
+                !trackW -> "× ${prevSet.reps}"
+                else -> "-"
             }
             key(set.id) {
                 SetRowItem(
                     set = set,
                     benchmarkText = setBenchmarkText,
+                    trackWeight = trackW,
                     onToggle = { onToggleSet(set) },
                     onOpenEditor = { onOpenSetEditor(set) }
                 )
@@ -710,6 +714,7 @@ private fun ExerciseCard(
 private fun SetRowItem(
     set: WorkoutSetEntity,
     benchmarkText: String,
+    trackWeight: Boolean = true,
     onToggle: () -> Unit,
     onOpenEditor: () -> Unit
 ) {
@@ -770,7 +775,7 @@ private fun SetRowItem(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = formatWeight(set.weightKg),
+                text = if (trackWeight) formatWeight(set.weightKg) else "自重",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
@@ -838,6 +843,7 @@ private fun SetRowItem(
 private fun QuickAdjustSetBottomSheet(
     exerciseName: String,
     set: WorkoutSetEntity,
+    trackWeight: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (Double, Int, String) -> Unit,
     onDelete: () -> Unit
@@ -883,7 +889,7 @@ private fun QuickAdjustSetBottomSheet(
                         color = AppleTextPrimary
                     )
                     Text(
-                        text = "调整第 ${set.setOrder} 组负荷与次数",
+                        text = "调整第 ${set.setOrder} 组" + if (trackWeight) "负荷与次数" else "次数",
                         fontSize = 12.sp,
                         color = AppleTextSecondary
                     )
@@ -942,8 +948,8 @@ private fun QuickAdjustSetBottomSheet(
                 }
             }
 
-            // 1. Weight Stepper Control
-            Column(
+            // 1. Weight Stepper Control（自重动作如悬垂举腿直接隐藏整段，仅记次数）
+            if (trackWeight) Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))

@@ -51,7 +51,7 @@ class AnalyticsViewModel(
         viewModelScope.launch {
             exercises.collect { list ->
                 if (_selectedExerciseId.value == null && list.isNotEmpty()) {
-                    val defaultEx = list.find { it.name.contains("平板杠铃卧推") } ?: list.first()
+                    val defaultEx = list.find { it.name == "卧推" } ?: list.first()
                     _selectedExerciseId.value = defaultEx.id
                 }
             }

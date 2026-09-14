@@ -60,10 +60,10 @@ class WorkoutViewModel(
 
                         val prevSetsMap = repository.getPreviousSessionSetsForExercise(exerciseId, session.id)
                         val topPrev = prevSetsMap.values.maxByOrNull { it.weightKg }
-                        val benchmarkSummary = if (topPrev != null && topPrev.weightKg > 0.0) {
-                            "前次基准: ${if (topPrev.weightKg % 1.0 == 0.0) topPrev.weightKg.toInt().toString() else topPrev.weightKg.toString()} kg × ${topPrev.reps}"
-                        } else {
-                            "首次训练 · 暂无基准"
+                        val benchmarkSummary = when {
+                            topPrev == null || (exercise.trackWeight && topPrev.weightKg <= 0.0) -> "首次训练 · 暂无基准"
+                            !exercise.trackWeight -> "前次基准: × ${topPrev.reps} 次"
+                            else -> "前次基准: ${if (topPrev.weightKg % 1.0 == 0.0) topPrev.weightKg.toInt().toString() else topPrev.weightKg.toString()} kg × ${topPrev.reps}"
                         }
 
                         val bestWeight = topPrev?.weightKg ?: exercise.personalRecordWeight
