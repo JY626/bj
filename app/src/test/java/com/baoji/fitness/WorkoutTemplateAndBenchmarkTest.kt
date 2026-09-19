@@ -2,6 +2,7 @@ package com.baoji.fitness
 
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.domain.model.PresetTemplates
+import com.baoji.fitness.domain.model.workoutTypeLabel
 import com.baoji.fitness.ui.workout.WorkoutViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -26,6 +27,19 @@ class WorkoutTemplateAndBenchmarkTest {
         val day3 = PresetTemplates.DAY3_LEGS_WEAK
         assertEquals("DAY 3 · 腿 + 外形补强", day3.title)
         assertEquals(listOf("史密斯深蹲", "史密斯推肩", "面拉", "侧平飞鸟", "悬垂举腿"), day3.exercises)
+    }
+
+    @Test
+    fun testWorkoutTypeLabelMatchesTemplatesAndFallsBack() {
+        PresetTemplates.allTemplates.forEach { template ->
+            val label = workoutTypeLabel(template.title)
+            assertTrue("模板 ${template.title} 应能识别出类型", label in listOf("推", "拉", "腿"))
+        }
+        assertEquals("推", workoutTypeLabel(PresetTemplates.DAY1_PUSH.title))
+        assertEquals("拉", workoutTypeLabel(PresetTemplates.DAY2_PULL.title))
+        assertEquals("腿", workoutTypeLabel(PresetTemplates.DAY3_LEGS_WEAK.title))
+        assertEquals("推", workoutTypeLabel("自由推力训练"))
+        assertEquals("练", workoutTypeLabel("晨间有氧"))
     }
 
     @Test

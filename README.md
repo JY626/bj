@@ -41,9 +41,10 @@ app/src/main/java/com/baoji/fitness/
 ├── ui/
 │   ├── workout/               # 训练记录主屏 & Apple Watch 悬浮休息计时条
 │   ├── analytics/             # 渐进负荷看板 & Canvas E1RM 折线图
+│   ├── calendar/              # 每日记录：训练打卡月历
 │   ├── coach/                 # AI 私教对话 & 结构化处方卡片
 │   ├── library/               # 动作库分类与生理健康档案
-│   └── navigation/            # 4-Tab 磨砂底部导航与路由宿主 (MainScreen)
+│   └── navigation/            # 5-Tab 磨砂底部导航与路由宿主 (MainScreen)
 ├── BaojiApplication.kt        # 应用级依赖注入与 Room 初始化
 └── MainActivity.kt            # 入口 Activity 与边缘延展 (Edge-to-Edge)
 ```

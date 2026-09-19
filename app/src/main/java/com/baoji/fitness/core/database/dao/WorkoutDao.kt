@@ -64,6 +64,10 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_sessions WHERE title = :title AND status = 'COMPLETED' ORDER BY startTime DESC LIMIT 1")
     suspend fun getLatestCompletedSessionByTitle(title: String): WorkoutSessionEntity?
 
+    /** M3a/M4a：最近的会话备注（跳过空串），用于本地总结。 */
+    @Query("SELECT notes FROM workout_sessions WHERE notes != '' AND status = 'COMPLETED' ORDER BY startTime DESC LIMIT :limit")
+    fun getRecentNotes(limit: Int): Flow<List<String>>
+
     @Query("SELECT * FROM workout_sessions WHERE title = :title ORDER BY startTime DESC LIMIT 1")
     suspend fun getLatestSessionByTitle(title: String): WorkoutSessionEntity?
 
@@ -72,4 +76,12 @@ interface WorkoutDao {
 
     @Query("DELETE FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId")
     suspend fun deleteSetsForExerciseInSession(sessionId: Long, exerciseId: Long)
+
+    // ---- M3a：复活两个从来没被写过的列（列已存在，零迁移）----
+
+    @Query("UPDATE workout_sessions SET notes = :notes WHERE id = :sessionId")
+    suspend fun updateSessionNotes(sessionId: Long, notes: String)
+
+    @Query("UPDATE workout_sets SET rpe = :rpe WHERE id = :setId")
+    suspend fun updateSetRpe(setId: Long, rpe: Double?)
 }

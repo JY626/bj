@@ -35,9 +35,12 @@ import com.baoji.fitness.core.theme.AppleBlack
 import com.baoji.fitness.core.theme.AppleFitnessGreen
 import com.baoji.fitness.core.theme.AppleHairline
 import com.baoji.fitness.core.theme.AppleTextSecondary
+import com.baoji.fitness.data.repository.BodyMetricRepository
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.ui.analytics.AnalyticsScreen
 import com.baoji.fitness.ui.analytics.AnalyticsViewModel
+import com.baoji.fitness.ui.calendar.CalendarScreen
+import com.baoji.fitness.ui.calendar.CalendarViewModel
 import com.baoji.fitness.ui.coach.CoachScreen
 import com.baoji.fitness.ui.coach.CoachViewModel
 import com.baoji.fitness.ui.library.LibraryScreen
@@ -47,6 +50,7 @@ import com.baoji.fitness.ui.workout.WorkoutViewModel
 enum class NavigationTab(val label: String, val icon: ImageVector) {
     WORKOUT("训练", LucideIcons.Dumbbell),
     ANALYTICS("负荷", LucideIcons.Activity),
+    CALENDAR("日历", LucideIcons.Calendar),
     COACH("私教", LucideIcons.Sparkles),
     LIBRARY("动作库", LucideIcons.Layers)
 }
@@ -55,8 +59,10 @@ enum class NavigationTab(val label: String, val icon: ImageVector) {
 fun MainScreen(
     workoutViewModel: WorkoutViewModel,
     analyticsViewModel: AnalyticsViewModel,
+    calendarViewModel: CalendarViewModel,
     coachViewModel: CoachViewModel,
-    repository: WorkoutRepository
+    repository: WorkoutRepository,
+    bodyMetricRepository: BodyMetricRepository
 ) {
     var selectedTab by remember { mutableStateOf(NavigationTab.WORKOUT) }
 
@@ -82,12 +88,16 @@ fun MainScreen(
                 NavigationTab.ANALYTICS -> AnalyticsScreen(
                     viewModel = analyticsViewModel
                 )
+                NavigationTab.CALENDAR -> CalendarScreen(
+                    viewModel = calendarViewModel
+                )
                 NavigationTab.COACH -> CoachScreen(
                     viewModel = coachViewModel,
                     onApplyToWorkout = { selectedTab = NavigationTab.WORKOUT }
                 )
                 NavigationTab.LIBRARY -> LibraryScreen(
-                    repository = repository
+                    repository = repository,
+                    bodyMetricRepository = bodyMetricRepository
                 )
             }
         }

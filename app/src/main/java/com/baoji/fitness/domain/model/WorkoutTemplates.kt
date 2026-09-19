@@ -65,3 +65,11 @@ object PresetTemplates {
     val PULL = DAY2_PULL
     val LEGS = DAY3_LEGS_WEAK
 }
+
+/** 从会话标题推断训练类型标签（推 / 拉 / 腿）；自定义训练认不出时返回「练」。 */
+fun workoutTypeLabel(title: String): String = when {
+    title.contains("推") -> "推"
+    title.contains("拉") -> "拉"
+    title.contains("腿") -> "腿"
+    else -> "练"
+}

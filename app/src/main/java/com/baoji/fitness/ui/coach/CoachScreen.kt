@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.baoji.fitness.core.designsystem.icons.LucideIcons
 import com.baoji.fitness.core.theme.AppleBlack
+import com.baoji.fitness.core.theme.AppleCautionOrange
 import com.baoji.fitness.core.theme.AppleFitnessGreen
 import com.baoji.fitness.core.theme.AppleGray4
 import com.baoji.fitness.core.theme.AppleGray5
@@ -51,6 +52,7 @@ import com.baoji.fitness.core.theme.AppleSystemBlue
 import com.baoji.fitness.core.theme.AppleSystemPurple
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
+import com.baoji.fitness.core.theme.AppleTextTertiary
 
 @Composable
 fun CoachScreen(
@@ -59,6 +61,8 @@ fun CoachScreen(
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val isReplying by viewModel.isReplying.collectAsState()
     var inputText by remember { mutableStateOf("") }
 
     Column(
@@ -67,7 +71,7 @@ fun CoachScreen(
             .background(AppleBlack)
             .padding(horizontal = 16.dp)
     ) {
-        // 1. Header (Apple Intelligence Style)
+        // 1. Header
         Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -78,7 +82,6 @@ fun CoachScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Intelligence gradient glow avatar
                 Box(
                     modifier = Modifier
                         .size(34.dp)
@@ -114,7 +117,11 @@ fun CoachScreen(
                         color = AppleTextPrimary
                     )
                     Text(
-                        text = "已连接本地 32 天负荷数据与生理画像",
+                        text = when {
+                            uiState.sharingEnabled && uiState.llmAvailable -> "已接入云端模型 · 读取你的训练数据"
+                            uiState.sharingEnabled -> "云端未配置 · 当前为本地规则"
+                            else -> "本地规则分析 · 未开启数据共享"
+                        },
                         fontSize = 10.sp,
                         color = AppleTextSecondary
                     )
@@ -129,7 +136,7 @@ fun CoachScreen(
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "Auto-Regulation",
+                    text = if (uiState.sharingEnabled && uiState.llmAvailable) "Cloud" else "On-Device",
                     fontSize = 10.sp,
                     color = AppleTextSecondary,
                     fontFamily = FontFamily.Monospace
@@ -139,219 +146,126 @@ fun CoachScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 2. Chat Conversation List
+        // 2. M4a 本地简报（真实数据，不再有写死脚本）
+        val briefing = uiState.briefing
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(AppleGray6)
+                .border(1.dp, AppleHairline, RoundedCornerShape(20.dp))
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Activity,
+                        contentDescription = null,
+                        tint = AppleFitnessGreen,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "今日简报",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextPrimary
+                    )
+                }
+                Text(
+                    text = uiState.briefingDate,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = AppleTextTertiary
+                )
+            }
+
+            if (briefing == null || briefing.isEmpty) {
+                Text(
+                    text = "正在读取你的训练数据…",
+                    fontSize = 12.sp,
+                    color = AppleTextTertiary
+                )
+            } else {
+                briefing.lines.forEach { line ->
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(AppleFitnessGreen)
+                        )
+                        Text(
+                            text = line,
+                            fontSize = 12.sp,
+                            color = AppleTextPrimary,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 3. 对话
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (messages.isEmpty() && !isReplying) {
+                item {
+                    Text(
+                        text = "上面是本地规则根据你的真实数据算出来的结论。想问更多细节，可以直接在下面提问。",
+                        fontSize = 11.sp,
+                        color = AppleTextTertiary,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
             items(messages) { msg ->
                 when (msg) {
-                    is ChatMessage.User -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .widthIn(max = 280.dp)
-                                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                                    .background(AppleSystemBlue)
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = msg.content,
-                                    fontSize = 13.sp,
-                                    color = Color.White,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                        }
-                    }
+                    is ChatMessage.User -> UserBubble(msg.content)
 
-                    is ChatMessage.AssistantText -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .widthIn(max = 300.dp)
-                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                                    .background(AppleGray6)
-                                    .border(1.dp, AppleHairline, RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Text(
-                                    text = msg.content,
-                                    fontSize = 13.sp,
-                                    color = AppleTextPrimary,
-                                    lineHeight = 18.sp
-                                )
-                            }
-                        }
-                    }
+                    is ChatMessage.AssistantText -> AssistantBubble(
+                        content = msg.content,
+                        source = msg.source
+                    )
 
-                    is ChatMessage.ActionableCard -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
-                                .background(AppleGray6)
-                                .border(1.dp, AppleHairline, RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = LucideIcons.Activity,
-                                    contentDescription = null,
-                                    tint = AppleFitnessGreen,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = "已应用关节减压规则库",
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = AppleFitnessGreen
-                                )
-                            }
+                    is ChatMessage.ActionableCard -> PrescriptionCard(
+                        message = msg,
+                        onApplyToWorkout = onApplyToWorkout
+                    )
+                }
+            }
 
-                            Text(
-                                text = msg.subtitle,
-                                fontSize = 12.sp,
-                                color = AppleTextPrimary,
-                                lineHeight = 16.sp
-                            )
-
-                            // Prescription Container
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(AppleGray5)
-                                    .border(1.dp, AppleHairline, RoundedCornerShape(14.dp))
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = msg.recommendedExercise,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = AppleTextPrimary
-                                    )
-                                    Text(
-                                        text = "阻力臂优化",
-                                        fontSize = 10.sp,
-                                        color = AppleFitnessGreen
-                                    )
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "建议负荷: 单只 ${msg.targetWeightKg} kg",
-                                        fontSize = 11.sp,
-                                        color = AppleTextSecondary
-                                    )
-                                    Text(
-                                        text = msg.targetReps,
-                                        fontSize = 11.sp,
-                                        color = AppleTextSecondary
-                                    )
-                                }
-                            }
-
-                            // Apply Button
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White)
-                                    .clickable { onApplyToWorkout() }
-                                    .padding(vertical = 9.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = LucideIcons.Check,
-                                        contentDescription = null,
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = "一键应用到当前训练",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    is ChatMessage.FoodNutritionCard -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(AppleGray6)
-                                .border(1.dp, AppleFitnessGreen.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "视觉解析餐盘 (Gemini Vision)",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AppleTextPrimary
-                                )
-                                Text(
-                                    text = "已测算",
-                                    fontSize = 10.sp,
-                                    color = AppleFitnessGreen
-                                )
-                            }
-                            Text(text = msg.mealName, fontSize = 11.sp, color = AppleTextSecondary)
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                MacroBox("能量", "${msg.calories} kcal", AppleFitnessGreen, Modifier.weight(1f))
-                                MacroBox("蛋白质", "${msg.proteinG} g", AppleTextPrimary, Modifier.weight(1f))
-                                MacroBox("碳水", "${msg.carbsG} g", AppleTextPrimary, Modifier.weight(1f))
-                                MacroBox("脂肪", "${msg.fatG} g", AppleTextPrimary, Modifier.weight(1f))
-                            }
-
-                            Text(
-                                text = msg.tip,
-                                fontSize = 10.sp,
-                                color = AppleFitnessGreen
-                            )
-                        }
-                    }
+            if (isReplying) {
+                item {
+                    Text(
+                        text = "正在分析…",
+                        fontSize = 11.sp,
+                        color = AppleTextTertiary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
                 }
             }
         }
 
-        // 3. Quick Action Chips
+        // 4. Quick Action Chips
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -359,12 +273,12 @@ fun CoachScreen(
                 .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickPill("拍照分析饮食", LucideIcons.Camera) { viewModel.triggerPhotoScan() }
-            QuickPill("疲劳减量 (Deload)") { viewModel.sendMessage("昨晚只睡4小时，帮我做减量调整") }
-            QuickPill("突破平台期") { viewModel.sendMessage("卧推卡在80kg三周了如何突破") }
+            QuickPill("今天该练什么") { viewModel.sendMessage("今天该练什么？") }
+            QuickPill("哪个部位欠练") { viewModel.sendMessage("这周哪个部位练得不够？") }
+            QuickPill("怎么突破平台") { viewModel.sendMessage("我卡在平台期了，怎么突破？") }
         }
 
-        // 4. Input Bar
+        // 5. Input Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -374,35 +288,19 @@ fun CoachScreen(
                 .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(AppleGray5)
-                    .clickable { viewModel.triggerPhotoScan() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = LucideIcons.Camera,
-                    contentDescription = null,
-                    tint = AppleTextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-
             BasicTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 10.dp),
+                    .padding(horizontal = 12.dp),
                 textStyle = TextStyle(color = AppleTextPrimary, fontSize = 13.sp),
                 cursorBrush = SolidColor(AppleFitnessGreen),
                 singleLine = true,
                 decorationBox = { innerTextField ->
                     if (inputText.isEmpty()) {
                         Text(
-                            text = "输入动作、状态或营养疑问...",
+                            text = "问训练量、加重、部位安排…",
                             color = AppleGray4,
                             fontSize = 13.sp
                         )
@@ -436,22 +334,168 @@ fun CoachScreen(
 }
 
 @Composable
-private fun MacroBox(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(AppleGray5)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun UserBubble(content: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
     ) {
-        Text(text = label, fontSize = 9.sp, color = AppleTextSecondary)
+        Box(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
+                .background(AppleSystemBlue)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = content,
+                fontSize = 13.sp,
+                color = Color.White,
+                lineHeight = 18.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AssistantBubble(content: String, source: ReplySource) {
+    val corner = RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .clip(corner)
+                .background(AppleGray6)
+                .border(1.dp, AppleHairline, corner)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                val tint = if (source == ReplySource.LLM) AppleSystemPurple else AppleCautionOrange
+                Icon(
+                    imageVector = if (source == ReplySource.LLM) LucideIcons.Sparkles else LucideIcons.Activity,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(11.dp)
+                )
+                Text(
+                    text = if (source == ReplySource.LLM) "云端模型" else "本地规则",
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = tint
+                )
+            }
+            Text(
+                text = content,
+                fontSize = 13.sp,
+                color = AppleTextPrimary,
+                lineHeight = 18.sp
+            )
+        }
+    }
+}
+
+/** M4b-2 会用到的结构化处方卡（当前不会主动产生，保留渲染分支）。 */
+@Composable
+private fun PrescriptionCard(message: ChatMessage.ActionableCard, onApplyToWorkout: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth(0.92f)
+            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
+            .background(AppleGray6)
+            .border(1.dp, AppleHairline, RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = LucideIcons.Activity,
+                contentDescription = null,
+                tint = AppleFitnessGreen,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = message.title,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppleTextPrimary
+            )
+        }
+
         Text(
-            text = value,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-            color = valueColor
+            text = message.subtitle,
+            fontSize = 12.sp,
+            color = AppleTextPrimary,
+            lineHeight = 16.sp
         )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(AppleGray5)
+                .border(1.dp, AppleHairline, RoundedCornerShape(14.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = message.recommendedExercise,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppleTextPrimary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "建议负荷: ${message.targetWeightKg} kg",
+                    fontSize = 11.sp,
+                    color = AppleTextSecondary
+                )
+                Text(
+                    text = message.targetReps,
+                    fontSize = 11.sp,
+                    color = AppleTextSecondary
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White)
+                .clickable { onApplyToWorkout() }
+                .padding(vertical = 9.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = LucideIcons.Check,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "一键应用到当前训练",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            }
+        }
     }
 }
 

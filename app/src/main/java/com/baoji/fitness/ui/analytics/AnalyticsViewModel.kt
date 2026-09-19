@@ -3,15 +3,17 @@ package com.baoji.fitness.ui.analytics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baoji.fitness.core.database.entity.ExerciseEntity
+import com.baoji.fitness.data.repository.WeeklyMuscleComparison
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
-import com.baoji.fitness.domain.model.MuscleVolumeStatus
+import com.baoji.fitness.domain.algorithm.PeriodReview
+import com.baoji.fitness.domain.algorithm.ReviewPeriod
+import com.baoji.fitness.domain.algorithm.TrendPoint
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,8 +36,34 @@ class AnalyticsViewModel(
     private val repository: WorkoutRepository
 ) : ViewModel() {
 
-    val weeklyMuscleVolumes: StateFlow<List<MuscleVolumeStatus>> = repository.getWeeklyMuscleVolumes()
+    // ---- M1 周期回顾 --------------------------------------------------------
+
+    private val _period = MutableStateFlow(ReviewPeriod.THIS_WEEK)
+    val period: StateFlow<ReviewPeriod> = _period.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val periodReview: StateFlow<PeriodReview?> = _period
+        .flatMapLatest { repository.getPeriodReview(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 近 8 周容量趋势（最旧 → 最新）。 */
+    val trend: StateFlow<List<TrendPoint>> = repository.getWeeklyTrend(8)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 部位有效组数本周 vs 上周：MEV/MAV/MRV 是周阈值，不跟随周期 chips。 */
+    val weeklyMuscleComparison: StateFlow<WeeklyMuscleComparison> =
+        repository.getWeeklyMuscleComparison()
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                WeeklyMuscleComparison(emptyList(), emptyList())
+            )
+
+    fun selectPeriod(period: ReviewPeriod) {
+        _period.value = period
+    }
+
+    // ---- 单动作 E1RM 曲线（原有）---------------------------------------------
 
     val exercises: StateFlow<List<ExerciseEntity>> = repository.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

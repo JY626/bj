@@ -28,11 +28,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,8 +66,8 @@ import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
 import com.baoji.fitness.domain.model.PresetTemplates
 import com.baoji.fitness.domain.model.WorkoutRoutineTemplate
+import com.baoji.fitness.ui.components.ExerciseGroupCard
 import com.baoji.fitness.ui.workout.components.RestTimerCapsule
-import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,6 +86,8 @@ fun WorkoutScreen(
     val allExercises by viewModel.allExercises.collectAsState()
     val restSeconds by viewModel.restSecondsLeft.collectAsState()
     val isTimerVisible by viewModel.isRestTimerVisible.collectAsState()
+    val todaySummary by viewModel.todaySummary.collectAsState()
+    val habit by viewModel.habit.collectAsState()
 
     val haptic = LocalHapticFeedback.current
 
@@ -101,7 +101,7 @@ fun WorkoutScreen(
         dateFormat.format(Date(activeSession?.startTime ?: System.currentTimeMillis()))
     }
     // 标题括号段在 22sp 下会挤爆右侧按钮，头部只显示短标题（如 "DAY 1 · 推日"），完整名在计划弹层里看
-    val headerTitle = (activeSession?.title ?: "今日训练").substringBefore("(").trim()
+    val headerTitle = (activeSession?.title ?: todaySummary?.title ?: "今日训练").substringBefore("(").trim()
 
     // 容量口径：热身组不计入 Volume（与 RP 口径一致）；完成组数仍含热身
     val completedSets = exerciseGroups.flatMap { it.sets }.filter { it.isCompleted }
@@ -109,20 +109,6 @@ fun WorkoutScreen(
         .filter { it.setType != "WARMUP" }
         .sumOf { it.weightKg * it.reps }.toInt()
     val totalSetsCount = exerciseGroups.flatMap { it.sets }.size
-
-    // 用时：session 真实时钟（归档后取 endTime-startTime，进行中每秒自走）
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(activeSession?.id, activeSession?.endTime) {
-        while (activeSession?.endTime == null) {
-            nowMs = System.currentTimeMillis()
-            delay(1000)
-        }
-        nowMs = System.currentTimeMillis()
-    }
-    val durationText = activeSession?.let { session ->
-        val elapsed = ((session.endTime ?: nowMs) - session.startTime).coerceAtLeast(0L)
-        "%d:%02d".format(elapsed / 60000, (elapsed % 60000) / 1000)
-    } ?: "--:--"
 
     // 加重建议：会话首个动作（主项）按双重渐进法，基于前次首组真实基准判定
     val firstGroup = exerciseGroups.firstOrNull()
@@ -260,17 +246,32 @@ fun WorkoutScreen(
                         .padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    MetricItem(label = "用时", value = durationText)
-                    MetricItem(label = "累计容量", value = "$totalVolume", unit = "kg")
-                    MetricItem(
-                        label = "完成组数",
-                        value = "${completedSets.size}/$totalSetsCount",
-                        valueColor = AppleFitnessGreen
-                    )
+                    if (activeSession == null) {
+                        // 归档后：沿用今日已完成训练的真实数据
+                        MetricItem(
+                            label = "累计容量",
+                            value = "${todaySummary?.totalVolumeKg?.toInt() ?: 0}",
+                            unit = "kg"
+                        )
+                        MetricItem(
+                            label = "完成组数",
+                            value = "${todaySummary?.groups?.sumOf { it.sets.size } ?: 0}",
+                            unit = "组",
+                            valueColor = AppleFitnessGreen
+                        )
+                    } else {
+                        MetricItem(label = "累计容量", value = "$totalVolume", unit = "kg")
+                        MetricItem(
+                            label = "完成组数",
+                            value = "${completedSets.size}/$totalSetsCount",
+                            valueColor = AppleFitnessGreen
+                        )
+                    }
                 }
             }
 
             // 3. 双重渐进建议条（真实数据：主项前次基准 → evaluateProgression）
+            if (activeSession != null) {
             item {
                 Row(
                     modifier = Modifier
@@ -304,9 +305,64 @@ fun WorkoutScreen(
                     )
                 }
             }
+            }
 
-            // Empty state if active session was archived
+            // 归档态：当天已完成训练 → 展示明细；次日尚未训练 → 提示开始新一轮
             if (activeSession == null) {
+                val summary = todaySummary
+                if (summary != null) {
+                    // M2：今天练完 → 「连续 13 天，明天是休息日」
+                    if (habit.currentStreak > 0) {
+                        item(key = "archived-habit") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(AppleGray6)
+                                    .border(1.dp, AppleHairline, RoundedCornerShape(18.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(text = "🔥", fontSize = 13.sp)
+                                Text(
+                                    text = buildString {
+                                        append("连续 ${habit.currentStreak} 天")
+                                        append(
+                                            if (habit.isRestDayTomorrow) "，明天是休息日"
+                                            else "，明天接着练"
+                                        )
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppleFitnessGreen
+                                )
+                            }
+                        }
+                    }
+                    item(key = "archived-note") {
+                        summary.notes.takeIf { it.isNotBlank() }?.let { note ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(AppleGray6)
+                                    .border(1.dp, AppleHairline, RoundedCornerShape(18.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(text = "笔记", fontSize = 10.sp, color = AppleTextSecondary)
+                                Text(text = note, fontSize = 12.sp, color = AppleTextPrimary)
+                            }
+                        }
+                    }
+                    summary.groups.forEach { group ->
+                        item(key = "archived-${group.exerciseName}") {
+                            ExerciseGroupCard(group)
+                        }
+                    }
+                } else {
                 item {
                     Column(
                         modifier = Modifier
@@ -334,7 +390,7 @@ fun WorkoutScreen(
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "今日训练已归档",
+                                text = "今天还没开始训练",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AppleTextPrimary
@@ -389,6 +445,7 @@ fun WorkoutScreen(
                         }
                     }
                 }
+                }
             }
 
             // 4. Exercise Cards List
@@ -415,6 +472,7 @@ fun WorkoutScreen(
             }
 
             // 5. Add Exercise Button
+            if (activeSession != null) {
             item {
                 Box(
                     modifier = Modifier
@@ -447,6 +505,7 @@ fun WorkoutScreen(
                         )
                     }
                 }
+            }
             }
 
             // Bottom Spacing for Tab Bar and Rest Timer
@@ -489,8 +548,8 @@ fun WorkoutScreen(
                 set = set,
                 trackWeight = exercise.trackWeight,
                 onDismiss = { activeEditingSet = null },
-                onSave = { updatedWeight, updatedReps, updatedType ->
-                    viewModel.updateSet(set.copy(setType = updatedType), updatedWeight, updatedReps)
+                onSave = { updatedWeight, updatedReps, updatedType, updatedRpe ->
+                    viewModel.applySetEdit(set, updatedWeight, updatedReps, updatedType, updatedRpe)
                     activeEditingSet = null
                 },
                 onDelete = {
@@ -505,9 +564,8 @@ fun WorkoutScreen(
             WorkoutSummaryDialog(
                 totalVolumeKg = totalVolume,
                 completedSetsCount = completedSets.size,
-                durationText = durationText,
-                onConfirm = {
-                    viewModel.finishCurrentWorkout()
+                onConfirm = { notes ->
+                    viewModel.finishCurrentWorkout(notes)
                     showSummaryDialog = false
                 },
                 onDismiss = { showSummaryDialog = false }
@@ -845,12 +903,14 @@ private fun QuickAdjustSetBottomSheet(
     set: WorkoutSetEntity,
     trackWeight: Boolean = true,
     onDismiss: () -> Unit,
-    onSave: (Double, Int, String) -> Unit,
+    onSave: (Double, Int, String, Double?) -> Unit,
     onDelete: () -> Unit
 ) {
     var currentWeight by remember(set.weightKg) { mutableStateOf(set.weightKg) }
     var currentReps by remember(set.reps) { mutableStateOf(set.reps) }
     var currentType by remember(set.setType) { mutableStateOf(set.setType) }
+    // M3a：RPE 默认不填（null）。只作记录与 M4 上下文，不参与双重渐进判定。
+    var currentRpe by remember(set.rpe) { mutableStateOf(set.rpe) }
 
     val haptic = LocalHapticFeedback.current
 
@@ -1057,6 +1117,66 @@ private fun QuickAdjustSetBottomSheet(
                 }
             }
 
+            // 3. RPE（主观疲劳度）—— 可选，默认不填
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleGray5)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(text = "RPE 主观疲劳度", fontSize = 12.sp, color = AppleTextSecondary)
+                        Text(
+                            text = "可选 · 只记录不参与加重判定",
+                            fontSize = 10.sp,
+                            color = AppleTextTertiary
+                        )
+                    }
+                    Text(
+                        text = currentRpe?.let { "RPE ${formatWeight(it)}" } ?: "未填",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = if (currentRpe != null) AppleFitnessGreen else AppleTextTertiary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(6.0, 7.0, 8.0, 9.0, 10.0).forEach { value ->
+                        val isSelected = currentRpe == value
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) Color.White else AppleGray6)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    currentRpe = if (isSelected) null else value
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = formatWeight(value),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.Black else AppleTextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
             // Confirm Button
             Box(
                 modifier = Modifier
@@ -1065,7 +1185,7 @@ private fun QuickAdjustSetBottomSheet(
                     .background(AppleFitnessGreen)
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSave(currentWeight, currentReps, currentType)
+                        onSave(currentWeight, currentReps, currentType, currentRpe)
                     }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
@@ -1225,14 +1345,20 @@ private fun AddExerciseBottomSheet(
     }
 }
 
+/**
+ * 完成训练弹窗。M3a：确认前加一句「今天状态如何？」写进 `workout_sessions.notes`，
+ * 这份自述会出现在 M4a 的本地私教总结里。
+ */
 @Composable
 private fun WorkoutSummaryDialog(
     totalVolumeKg: Int,
     completedSetsCount: Int,
-    durationText: String,
-    onConfirm: () -> Unit,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var noteText by remember { mutableStateOf("") }
+    val presets = listOf("状态好", "一般", "累", "睡眠不足")
+
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -1285,16 +1411,6 @@ private fun WorkoutSummaryDialog(
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "总用时", fontSize = 10.sp, color = AppleTextSecondary)
-                    Text(
-                        text = durationText,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = AppleTextPrimary
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(text = "总容量", fontSize = 10.sp, color = AppleTextSecondary)
                     Text(
                         text = "$totalVolumeKg kg",
@@ -1313,6 +1429,70 @@ private fun WorkoutSummaryDialog(
                         fontFamily = FontFamily.Monospace,
                         color = AppleTextPrimary
                     )
+                }
+            }
+
+            // M3a：今天状态如何？（一行输入 + 预设 chips）→ 写入会话备注
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AppleGray5)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "今天状态如何？",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppleTextPrimary
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AppleGray6)
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    if (noteText.isEmpty()) {
+                        Text(
+                            text = "记一句感受，私教会读它",
+                            fontSize = 12.sp,
+                            color = AppleTextTertiary
+                        )
+                    }
+                    BasicTextField(
+                        value = noteText,
+                        onValueChange = { noteText = it },
+                        textStyle = TextStyle(fontSize = 12.sp, color = AppleTextPrimary),
+                        cursorBrush = SolidColor(AppleFitnessGreen),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    presets.forEach { preset ->
+                        val isSelected = noteText == preset
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) Color.White else AppleGray6)
+                                .clickable { noteText = if (isSelected) "" else preset }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = preset,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.Black else AppleTextSecondary
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1343,7 +1523,7 @@ private fun WorkoutSummaryDialog(
                         .weight(1f)
                         .clip(RoundedCornerShape(14.dp))
                         .background(AppleFitnessGreen)
-                        .clickable { onConfirm() }
+                        .clickable { onConfirm(noteText) }
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center
                 ) {

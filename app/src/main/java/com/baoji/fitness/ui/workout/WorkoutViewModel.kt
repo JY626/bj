@@ -6,8 +6,11 @@ import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.data.repository.WorkoutRepository
+import com.baoji.fitness.data.settings.ReminderSettings
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
+import com.baoji.fitness.domain.algorithm.StreakCalculator
 import com.baoji.fitness.domain.model.PresetTemplates
+import com.baoji.fitness.domain.model.WorkoutDayDetail
 import com.baoji.fitness.domain.model.WorkoutRoutineTemplate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -22,6 +25,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 data class ExerciseGroup(
     val exercise: ExerciseEntity,
@@ -31,8 +35,15 @@ data class ExerciseGroup(
     val benchmarkSummary: String = ""
 )
 
+/** M2：训练页归档态那句「连续 13 天，明天是休息日」。 */
+data class WorkoutHabit(
+    val currentStreak: Int = 0,
+    val isRestDayTomorrow: Boolean = false
+)
+
 class WorkoutViewModel(
-    private val repository: WorkoutRepository
+    private val repository: WorkoutRepository,
+    private val reminderSettings: ReminderSettings
 ) : ViewModel() {
 
     // Reactive active session from Room
@@ -86,6 +97,22 @@ class WorkoutViewModel(
     // All available exercises for adding to session
     val allExercises: StateFlow<List<ExerciseEntity>> = repository.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 今日已完成（归档）训练的明细：会话结束后训练页仍然展示当天数据。 */
+    val todaySummary: StateFlow<WorkoutDayDetail?> = repository.getDayDetail(LocalDate.now())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** M2：归档态的习惯文案数据。 */
+    val habit: StateFlow<WorkoutHabit> = combine(
+        repository.getTrainedDayTypes(),
+        reminderSettings.config
+    ) { days, config ->
+        val today = LocalDate.now()
+        WorkoutHabit(
+            currentStreak = StreakCalculator.currentStreak(days.keys, today),
+            isRestDayTomorrow = StreakCalculator.isRestDayTomorrow(today, config.trainingDays)
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WorkoutHabit())
 
     // Timer State
     private val _restSecondsLeft = MutableStateFlow(0)
@@ -215,6 +242,21 @@ class WorkoutViewModel(
         }
     }
 
+    /** M3a：一次落库重量/次数/组类型/RPE（RPE 只作记录，不参与渐进判定）。 */
+    fun applySetEdit(
+        set: WorkoutSetEntity,
+        weightKg: Double,
+        reps: Int,
+        setType: String,
+        rpe: Double?
+    ) {
+        viewModelScope.launch {
+            repository.saveSet(
+                set.copy(weightKg = weightKg, reps = reps, setType = setType, rpe = rpe)
+            )
+        }
+    }
+
     fun removeExerciseFromSession(exerciseId: Long) {
         val session = activeSession.value ?: return
         viewModelScope.launch {
@@ -255,7 +297,7 @@ class WorkoutViewModel(
         }
     }
 
-    fun finishCurrentWorkout() {
+    fun finishCurrentWorkout(notes: String = "") {
         val session = activeSession.value ?: return
         // 口径与训练页一致：热身组不计入总容量
         val sets = exerciseGroups.value.flatMap { it.sets }
@@ -263,7 +305,7 @@ class WorkoutViewModel(
         val totalVolume = sets.sumOf { it.weightKg * it.reps }
 
         viewModelScope.launch {
-            repository.finishSession(session, totalVolume)
+            repository.finishSession(session, totalVolume, notes.trim())
             _isRestTimerVisible.value = false
             timerJob?.cancel()
         }

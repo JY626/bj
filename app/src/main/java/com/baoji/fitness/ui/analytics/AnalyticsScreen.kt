@@ -1,6 +1,5 @@
 package com.baoji.fitness.ui.analytics
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,11 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +38,10 @@ import com.baoji.fitness.core.theme.AppleHairline
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
+import com.baoji.fitness.domain.algorithm.ReviewPeriod
+import com.baoji.fitness.domain.algorithm.TrendPoint
+import com.baoji.fitness.ui.components.ChartPoint
+import com.baoji.fitness.ui.components.MinimalLineChart
 
 @Composable
 fun AnalyticsScreen(
@@ -52,7 +51,10 @@ fun AnalyticsScreen(
     val exercises by viewModel.exercises.collectAsState()
     val selectedExerciseId by viewModel.selectedExerciseId.collectAsState()
     val analyticsState by viewModel.analyticsState.collectAsState()
-    val muscleVolumes by viewModel.weeklyMuscleVolumes.collectAsState()
+    val period by viewModel.period.collectAsState()
+    val periodReview by viewModel.periodReview.collectAsState()
+    val trend by viewModel.trend.collectAsState()
+    val weeklyMuscle by viewModel.weeklyMuscleComparison.collectAsState()
 
     LazyColumn(
         modifier = modifier
@@ -80,6 +82,220 @@ fun AnalyticsScreen(
                     letterSpacing = (-0.5).sp
                 )
             }
+        }
+
+        // ===== M1 周期回顾 =====
+        // 1. 周期切换 chips
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ReviewPeriod.values().forEach { candidate ->
+                    val isSelected = candidate == period
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isSelected) Color.White else AppleGray6)
+                            .clickable { viewModel.selectPeriod(candidate) }
+                            .padding(horizontal = 16.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = candidate.label,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.Black else AppleTextSecondary
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. 汇总卡：训练 N 次 · 总容量 X · 有效组数 Y · 环比
+        item {
+            val review = periodReview
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(AppleGray6)
+                    .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${review?.label ?: period.label}回顾",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextPrimary
+                    )
+                    DeltaBadge(review?.volumeDeltaPct)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    SummaryMetric("训练次数", "${review?.sessionCount ?: 0}", "次", AppleTextPrimary)
+                    SummaryMetric(
+                        "总容量",
+                        "${(review?.totalVolumeKg ?: 0.0).toInt()}",
+                        "kg",
+                        AppleFitnessGreen
+                    )
+                    SummaryMetric("有效组数", "${review?.totalSets ?: 0}", "组", AppleTextPrimary)
+                }
+
+                val typeCounts = review?.typeCounts.orEmpty()
+                if (typeCounts.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        typeCounts.forEach { (type, count) ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(AppleGray5)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "$type $count",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = AppleTextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. 部位容量进度条：本周 vs 上周 双色条，对照 MEV/MAV/MRV
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(AppleGray6)
+                    .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "周肌群有效组数",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextPrimary
+                    )
+                    Text(
+                        text = "本周 vs 上周 · RP 运动周期科学区间 (MEV/MAV/MRV)",
+                        fontSize = 11.sp,
+                        color = AppleTextSecondary
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    weeklyMuscle.current.forEachIndexed { index, status ->
+                        val previous = weeklyMuscle.previous.getOrNull(index)
+                        val color = when {
+                            status.completedSets < status.mev -> AppleCautionOrange
+                            status.completedSets <= status.mav -> AppleFitnessGreen
+                            else -> Color.White
+                        }
+                        VolumeProgressBar(
+                            muscle = status.muscleGroup,
+                            current = status.completedSets,
+                            previous = previous?.completedSets ?: 0,
+                            target = status.mav,
+                            color = color,
+                            label = status.statusText
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. 容量趋势折线（近 8 周）
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(AppleGray6)
+                    .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "容量趋势",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleTextPrimary
+                        )
+                        Text(
+                            text = "近 8 周训练容量 (kg)",
+                            fontSize = 11.sp,
+                            color = AppleTextSecondary
+                        )
+                    }
+                    Text(
+                        text = trend.lastOrNull()?.let { "本周 ${it.volumeKg.toInt()}" } ?: "--",
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppleFitnessGreen
+                    )
+                }
+
+                if (trend.any { it.volumeKg > 0.0 }) {
+                    TrendCanvasChart(
+                        points = trend,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(AppleGray5),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "还没有足够的训练记录，完成几次训练后这里会出现周容量曲线",
+                            fontSize = 11.sp,
+                            color = AppleTextTertiary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ===== 单动作负荷（原有）=====
+        item {
+            Text(
+                text = "单动作负荷",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppleTextPrimary
+            )
         }
 
         // Dynamic Exercise Filter Chips from Database
@@ -204,63 +420,6 @@ fun AnalyticsScreen(
             }
         }
 
-        // Weekly Muscle Volume RP Landmarks Card
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(AppleGray6)
-                    .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "周肌群有效组数",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppleTextPrimary
-                        )
-                        Text(
-                            text = "RP 运动周期科学区间 (MAV/MRV)",
-                            fontSize = 11.sp,
-                            color = AppleTextSecondary
-                        )
-                    }
-                    Text(
-                        text = "数据实时同步中",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = AppleFitnessGreen
-                    )
-                }
-
-                // Muscle Group Bars from Repository
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    muscleVolumes.forEach { status ->
-                        val color = when {
-                            status.completedSets < status.mev -> AppleCautionOrange
-                            status.completedSets <= status.mav -> AppleFitnessGreen
-                            else -> Color.White
-                        }
-                        VolumeProgressBar(
-                            muscle = status.muscleGroup,
-                            current = status.completedSets,
-                            target = status.mav,
-                            color = color,
-                            label = status.statusText
-                        )
-                    }
-                }
-            }
-        }
-
         // Overload Protocol Decision Card
         item {
             Column(
@@ -294,16 +453,74 @@ fun AnalyticsScreen(
     }
 }
 
+/** 汇总卡里的单个指标（标签 / 数值 / 单位）。 */
+@Composable
+private fun SummaryMetric(
+    label: String,
+    value: String,
+    unit: String,
+    valueColor: Color
+) {
+    Column(horizontalAlignment = Alignment.Start) {
+        Text(text = label, fontSize = 10.sp, color = AppleTextSecondary)
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
+            Text(
+                text = value,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = valueColor
+            )
+            Text(text = " $unit", fontSize = 11.sp, color = AppleTextSecondary)
+        }
+    }
+}
+
+/**
+ * 环比徽章。训练容量是「越多越好」的语义，所以涨用 App 既有的进度绿、
+ * 跌用提醒橙（与股票行情的红涨绿跌不是一套语境）。
+ */
+@Composable
+private fun DeltaBadge(deltaPct: Double?) {
+    val (text, color) = when {
+        deltaPct == null -> "-- 无上期" to AppleTextTertiary
+        deltaPct >= 0.05 -> String.format("↑ +%.0f%%", deltaPct) to AppleFitnessGreen
+        deltaPct <= -0.05 -> String.format("↓ %.0f%%", deltaPct) to AppleCautionOrange
+        else -> "→ 持平" to AppleTextSecondary
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = 0.14f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+            color = color
+        )
+    }
+}
+
+/**
+ * 部位有效组数：本周实心条 + 上周细条，对照 MAV 刻度。
+ * 上周用中性灰细条，避免两个高饱和色打架。
+ */
 @Composable
 private fun VolumeProgressBar(
     muscle: String,
     current: Int,
+    previous: Int,
     target: Int,
     color: Color,
     label: String
 ) {
     val safeTarget = if (target > 0) target else 16
-    val fraction = (current.toFloat() / safeTarget).coerceIn(0f, 1f)
+    val currentFraction = (current.toFloat() / safeTarget).coerceIn(0f, 1f)
+    val previousFraction = (previous.toFloat() / safeTarget).coerceIn(0f, 1f)
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -317,6 +534,7 @@ private fun VolumeProgressBar(
                 color = color
             )
         }
+        // 本周
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -326,13 +544,54 @@ private fun VolumeProgressBar(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(fraction)
+                    .fillMaxWidth(currentFraction)
                     .height(6.dp)
                     .clip(CircleShape)
                     .background(color)
             )
         }
+        // 上周
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(3.dp)
+                    .clip(CircleShape)
+                    .background(AppleGray5)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(previousFraction)
+                        .height(3.dp)
+                        .clip(CircleShape)
+                        .background(AppleTextTertiary)
+                )
+            }
+            Text(
+                text = " 上周 $previous",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = AppleTextTertiary
+            )
+        }
     }
+}
+
+/** 近 N 周容量折线：共用 [MinimalLineChart]，zeroBased + x 轴周标签。 */
+@Composable
+private fun TrendCanvasChart(
+    points: List<TrendPoint>,
+    modifier: Modifier = Modifier
+) {
+    MinimalLineChart(
+        points = points.map { ChartPoint(label = it.label, value = it.volumeKg) },
+        modifier = modifier,
+        zeroBased = true,
+        showXLabels = true
+    )
 }
 
 @Composable
@@ -340,62 +599,11 @@ private fun OverloadCanvasChart(
     points: List<OverloadDataPoint>,
     modifier: Modifier = Modifier
 ) {
-    if (points.isEmpty()) return
-
-    val values = points.map { it.e1rm }
-    val min = (values.minOrNull() ?: 60.0) - 5.0
-    val max = (values.maxOrNull() ?: 100.0) + 5.0
-
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height - 24f // reserve space for bottom labels
-        val stepX = if (points.size > 1) w / (points.size - 1) else w / 2
-
-        // Draw horizontal subtle grid lines
-        for (i in 0..3) {
-            val y = h - (i / 3f) * h
-            drawLine(
-                color = Color.White.copy(alpha = 0.06f),
-                start = Offset(0f, y),
-                end = Offset(w, y),
-                strokeWidth = 1f
-            )
-        }
-
-        // Draw Line Path if 2 or more points
-        if (points.size > 1) {
-            val path = Path()
-            points.forEachIndexed { i, pt ->
-                val x = i * stepX
-                val normY = (pt.e1rm - min) / (max - min)
-                val y = (h - normY * h).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-
-            drawPath(
-                path = path,
-                color = AppleFitnessGreen,
-                style = Stroke(width = 5f, cap = StrokeCap.Round)
-            )
-        }
-
-        // Draw Points & PR Highlights
-        points.forEachIndexed { i, pt ->
-            val x = if (points.size > 1) i * stepX else w / 2
-            val normY = (pt.e1rm - min) / (max - min)
-            val y = (h - normY * h).toFloat()
-            val isLast = (i == points.size - 1)
-
-            drawCircle(
-                color = if (pt.isPR) AppleFitnessGreen else AppleGray6,
-                radius = if (pt.isPR || isLast) 9f else 6f,
-                center = Offset(x, y)
-            )
-            drawCircle(
-                color = if (pt.isPR) Color.White else AppleFitnessGreen,
-                radius = if (pt.isPR || isLast) 4.5f else 3f,
-                center = Offset(x, y)
-            )
-        }
-    }
+    MinimalLineChart(
+        points = points.map {
+            ChartPoint(label = it.label, value = it.e1rm, highlight = it.isPR)
+        },
+        modifier = modifier,
+        zeroBased = false
+    )
 }

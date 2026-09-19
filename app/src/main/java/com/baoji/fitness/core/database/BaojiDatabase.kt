@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.baoji.fitness.core.database.dao.BodyMetricDao
 import com.baoji.fitness.core.database.dao.ExerciseDao
 import com.baoji.fitness.core.database.dao.WorkoutDao
+import com.baoji.fitness.core.database.entity.BodyMetricEntity
 import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
@@ -18,18 +21,50 @@ import kotlinx.coroutines.launch
     entities = [
         ExerciseEntity::class,
         WorkoutSessionEntity::class,
-        WorkoutSetEntity::class
+        WorkoutSetEntity::class,
+        BodyMetricEntity::class
     ],
-    version = 2,
-    exportSchema = false
+    version = 3,
+    exportSchema = true
 )
 abstract class BaojiDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
     abstract fun workoutDao(): WorkoutDao
 
+    /** M3b：身体数据。 */
+    abstract fun bodyMetricDao(): BodyMetricDao
+
     companion object {
         @Volatile
         private var INSTANCE: BaojiDatabase? = null
+
+        /**
+         * v2 → v3：唯一的结构变更 = 新增 `body_metrics` 表（M3b 的身体数据）。
+         * 列级变更本轮为零；M1 / M2 / M3a 全部不需要迁移。
+         *
+         * SQL 必须与 `app/schemas/.../3.json` 里 Room 生成的 createSql 逐字一致，
+         * 否则运行时 schema 校验（identityHash）会直接抛异常。
+         * 由 `MigrationTest` 覆盖。
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `body_metrics` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`date` INTEGER NOT NULL, " +
+                        "`weightKg` REAL, " +
+                        "`bodyFatPct` REAL, " +
+                        "`chestCm` REAL, " +
+                        "`waistCm` REAL, " +
+                        "`armCm` REAL, " +
+                        "`note` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_body_metrics_date` " +
+                        "ON `body_metrics` (`date`)"
+                )
+            }
+        }
 
         fun getDatabase(context: Context, scope: CoroutineScope): BaojiDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -39,9 +74,9 @@ abstract class BaojiDatabase : RoomDatabase() {
                     "baoji_database"
                 )
                     .addCallback(DatabaseCallback(scope))
-                    // v2: 动作库裁剪为个人实际训练的 11 个 + 新增 trackWeight 字段。
-                    // 旧库全是开发期演示数据（无真实训练史），重建比写迁移便宜。
-                    .fallbackToDestructiveMigration()
+                    // v3 起口径改变：M1 之后会积累真实训练史，M3b/M2 都要动 schema，
+                    // 再清一次库等于把路线图目标全抹掉。所有版本升级一律走显式迁移。
+                    .addMigrations(MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance
@@ -52,9 +87,8 @@ abstract class BaojiDatabase : RoomDatabase() {
             private val scope: CoroutineScope
         ) : RoomDatabase.Callback() {
             // 种子只走 onOpen + 空表检查这一条路径：
-            // fallbackToDestructiveMigration 重建数据库时不会触发 onCreate 回调，
-            // 在 onCreate 里播种会导致升级后动作库为空。onOpen 每次打开都跑，
-            // COUNT 检查保证幂等，将来再 bump 版本也不会漏种。
+            // 数据库重建时不会触发 onCreate 回调，在 onCreate 里播种会导致升级后动作库为空。
+            // onOpen 每次打开都跑，COUNT 检查保证幂等，将来再 bump 版本也不会漏种。
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
                 INSTANCE?.let { database ->
