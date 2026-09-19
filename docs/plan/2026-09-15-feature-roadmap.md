@@ -303,3 +303,22 @@ M3b 的身体数据、M3a 的备注都会外发。**在设置里明确写"哪些
 附带净删除：`getCompletedSetsBetween` / `getSessionsBetween` 两条 M1 专用 DAO 查询与 `windowToMillis`
 （时区换算整类消失），三个 M1 数据面改为共用仓储内的 `trainingHistory` 单一来源。
 `PeriodReviewCalculatorTest` 8 → 11 个用例；全量 52 tests / 0 failures，`assembleDebug` 通过。
+
+**M2–M4 审计判定（2026-09-19 续）**：全部通过，未改动逻辑。
+
+| 模块 | 关键核查 | 结果 |
+|---|---|---|
+| M2 | `currentStreak`：今天未练但从昨天起算（当天还没过完不算断） | ✓ 另有 StreakCalculatorTest 8 例 |
+| M2 | 默认不发通知；`POST_NOTIFICATIONS` 只在用户拨开关时申请 | ✓ |
+| M2 | Worker 打卡判定复用 `getTrainedDayTypes()` | ✓ 与日历同一口径 |
+| M2 | WorkManager ±15min 取舍写在注释里，不用 `SCHEDULE_EXACT_ALARM` | ✓ 与文档一致 |
+| M3a | `notes` 写入 → 归档回显 → `getRecentNotes` 喂教练；`rpe` 可录可显 | ✓ 全链路通 |
+| M3a | 双重渐进算法是否被 RPE 污染 | ✓ `OverloadCalculator` 零引用 |
+| M3b | 一天一条：`date` 唯一索引 + REPLACE；传 null 保留旧值（只称体重不会清空腰围） | ✓ |
+| M4b | Key 只来自 `local.properties` → `BuildConfig` | ✓ 该文件未被 git 跟踪，库内无真实 key |
+| M4b | **隐私门**：未开 `llmSharingEnabled` 或未配 Key | ✓ **根本不发请求**，不是先发再丢 |
+| M4b | 失败降级 | ✓ 断网/异常一律回 M4a 本地规则并注明原因 |
+| M4b | 明文传输 | ✓ `usesCleartextTraffic` 默认关，`http://` 的 baseUrl 发不出去 |
+
+本轮实际代码改动仅一处：`BodyMetricDao` 的 REPLACE 注释与实际行为相反
+（仓储层写入时带了现有行的 `id`，id 其实保持稳定），已更正。

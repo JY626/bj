@@ -12,7 +12,8 @@ interface BodyMetricDao {
 
     /**
      * `date` 上有唯一索引 + REPLACE：同一天记两次是**覆盖**，不会攒出两条。
-     * 覆盖后 id 会变（REPLACE = DELETE + INSERT），本表没有任何外部引用，安全。
+     * 仓储层会先取回现有行并带上其 `id` 写入，所以 id 实际上保持稳定；
+     * 本表也没有任何外部引用，即使 id 变动也无连带影响。
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(metric: BodyMetricEntity): Long
