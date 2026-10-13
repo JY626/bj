@@ -176,6 +176,45 @@ class MigrationTest {
         }
     }
 
+    /**
+     * v5 → v6：砍掉 AI 私教，删除 coach_reports 表，其余数据一条不少。
+     */
+    @Test
+    fun migrate5To6_dropsCoachReportsTable() {
+        helper.createDatabase(TEST_DB, 5).use { db ->
+            db.execSQL("INSERT INTO body_metrics (date, weightKg, heightCm, note) VALUES (1000, 73.5, 175.0, '')")
+            db.execSQL(
+                "INSERT INTO coach_reports (date, scope, content, source, generatedAt) " +
+                    "VALUES (1000, 'TODAY', '报告', 'LOCAL', 1)"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, BaojiDatabase.MIGRATION_5_6).use { db ->
+            assertEquals("身体数据必须保留", 1, count(db, "body_metrics"))
+            // coach_reports 表已被 DROP
+            db.query("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='coach_reports'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+        }
+    }
+
+    /** v2 用户直升 v6：全链路迁移通畅。 */
+    @Test
+    fun migrate2To6_chainsAllMigrations() {
+        helper.createDatabase(TEST_DB, 2).use { db -> seedV2(db) }
+
+        helper.runMigrationsAndValidate(
+            TEST_DB, 6, true,
+            BaojiDatabase.MIGRATION_2_3, BaojiDatabase.MIGRATION_3_4, BaojiDatabase.MIGRATION_4_5, BaojiDatabase.MIGRATION_5_6
+        ).use { db ->
+            assertEquals(2, count(db, "workout_sessions"))
+            assertEquals(31, count(db, "workout_sets"))
+            assertEquals(11, count(db, "exercises"))
+            assertEquals(0, count(db, "body_metrics"))
+        }
+    }
+
     /** 回放设备上真实的 v2 数据形态（11 动作 / 2 会话 / 31 组）。 */
     private fun seedV2(db: SupportSQLiteDatabase) {
         db.execSQL(

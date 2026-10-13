@@ -38,7 +38,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
-import com.baoji.fitness.core.database.entity.CoachReportEntity
 import com.baoji.fitness.core.theme.AppleBlack
 import com.baoji.fitness.core.theme.AppleCautionOrange
 import com.baoji.fitness.core.theme.AppleFitnessGreen
@@ -50,7 +49,6 @@ import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.data.settings.ReminderConfig
-import com.baoji.fitness.domain.algorithm.CoachReport
 import com.baoji.fitness.domain.model.WorkoutDayDetail
 import com.baoji.fitness.ui.components.ExerciseGroupCard
 import com.baoji.fitness.ui.library.BodyMetricSheet
@@ -70,7 +68,6 @@ fun CalendarScreen(
     val selectedDay by viewModel.selectedDay.collectAsState()
     val dayDetail by viewModel.dayDetail.collectAsState()
     val dayMetric by viewModel.dayMetric.collectAsState()
-    val dayReports by viewModel.dayReports.collectAsState()
     val habit by viewModel.habit.collectAsState()
     val reminderConfig by viewModel.reminderConfig.collectAsState()
 
@@ -115,7 +112,7 @@ fun CalendarScreen(
         )
 
         Text(
-            text = "点日期查看当天训练明细与已保存的分析报告",
+            text = "点日期查看当天训练明细与身体数据",
             fontSize = 12.sp,
             color = AppleTextTertiary
         )
@@ -134,12 +131,6 @@ fun CalendarScreen(
             onToggleDay = { viewModel.toggleTrainingDay(it) }
         )
 
-        // M4b：隐私开关（哪些数据会被发送）
-        PrivacySettingsCard(
-            sharingEnabled = reminderConfig.llmSharingEnabled,
-            onChange = { viewModel.setLlmSharing(it) }
-        )
-
         Spacer(modifier = Modifier.height(80.dp))
     }
 
@@ -149,7 +140,6 @@ fun CalendarScreen(
             day = selectedDay!!,
             detail = dayDetail,
             metric = dayMetric,
-            reports = dayReports,
             onRecordMetric = { showDayMetricSheet = true },
             onDismiss = { viewModel.selectDay(null) }
         )
@@ -344,43 +334,6 @@ private fun RestDurationCard(restSeconds: Int, onChange: (Int) -> Unit) {
     }
 }
 
-/** M4b 隐私底线：明确写出哪些数据会被发送，并给开关。 */
-@Composable
-private fun PrivacySettingsCard(
-    sharingEnabled: Boolean,
-    onChange: (Boolean) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(AppleGray6)
-            .border(1.dp, AppleHairline, RoundedCornerShape(20.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "让私教读取我的数据",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AppleTextPrimary
-            )
-            TogglePill(checked = sharingEnabled, onCheckedChange = onChange)
-        }
-        Text(
-            text = "开启后，这些内容会被发送给大模型：周期容量汇总、近 30 天训练摘要、训练日备注、" +
-                "身体数据（体重/体脂/围度）。不会发送任何账号标识，也不会上传照片。",
-            fontSize = 11.sp,
-            color = AppleTextSecondary,
-            lineHeight = 16.sp
-        )
-    }
-}
 
 @Composable
 private fun SettingRowLabel(text: String) {
@@ -585,7 +538,6 @@ private fun DayDetailSheet(
     day: LocalDate,
     detail: WorkoutDayDetail?,
     metric: BodyMetricEntity?,
-    reports: List<CoachReportEntity>,
     onRecordMetric: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -718,56 +670,6 @@ private fun DayDetailSheet(
                     fontFamily = FontFamily.Monospace,
                     color = if (metric == null) AppleTextTertiary else AppleTextPrimary
                 )
-            }
-
-            // 保存的私教分析（今日/本周，生成过才有）
-            reports.forEach { report ->
-                val scopeLabel = when (report.scope) {
-                    "TODAY" -> "今日分析"
-                    "THIS_WEEK" -> "本周分析"
-                    else -> report.scope
-                }
-                val scope = when (report.scope) {
-                    "TODAY" -> CoachReport.Scope.TODAY
-                    "LAST_4_WEEKS" -> CoachReport.Scope.LAST_4_WEEKS
-                    else -> CoachReport.Scope.THIS_WEEK
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AppleGray5)
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(scopeLabel, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppleTextPrimary)
-                        Text(
-                            text = if (report.source == "LLM") "云端" else "本地",
-                            fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = AppleTextTertiary
-                        )
-                    }
-                    CoachReport.splitSections(report.content, scope).forEach { section ->
-                        Text(
-                            text = section.title,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppleFitnessGreen,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                        Text(
-                            text = section.body,
-                            fontSize = 12.sp,
-                            color = AppleTextPrimary,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
             }
         }
     }

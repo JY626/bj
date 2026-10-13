@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,20 +17,6 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // M4b：LLM API Key 只从 local.properties 注入（该文件已在 .gitignore 内），
-        // 绝不硬编码进源码 / APK —— 反编译即泄露。
-        val localProps = Properties().apply {
-            val f = rootProject.file("local.properties")
-            if (f.exists()) f.inputStream().use { load(it) }
-        }
-        buildConfigField("String", "LLM_API_KEY", "\"${localProps.getProperty("llm.apiKey") ?: ""}\"")
-        buildConfigField(
-            "String",
-            "LLM_BASE_URL",
-            "\"${localProps.getProperty("llm.baseUrl") ?: "https://api.openai.com/v1"}\""
-        )
-        buildConfigField("String", "LLM_MODEL", "\"${localProps.getProperty("llm.model") ?: "gpt-4o-mini"}\"")
     }
 
     buildTypes {
@@ -63,7 +47,7 @@ android {
 }
 
 ksp {
-    // M0：导出 Room schema，迁移测试与后续版本 diff 都依赖它
+    // 导出 Room schema，迁移测试与后续版本 diff 都依赖它
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
@@ -90,11 +74,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 
-    // WorkManager（M2 训练日提醒）
+    // WorkManager（训练日提醒）
     implementation(libs.androidx.work.runtime.ktx)
-
-    // 网络（M4b 真 LLM，单轮问答）
-    implementation(libs.okhttp)
 
     // Testing
     testImplementation(libs.junit)

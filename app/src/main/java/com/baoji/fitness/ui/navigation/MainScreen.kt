@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -42,8 +40,6 @@ import com.baoji.fitness.ui.analytics.AnalyticsViewModel
 import com.baoji.fitness.ui.body.BodyScreen
 import com.baoji.fitness.ui.calendar.CalendarScreen
 import com.baoji.fitness.ui.calendar.CalendarViewModel
-import com.baoji.fitness.ui.coach.CoachScreen
-import com.baoji.fitness.ui.coach.CoachViewModel
 import com.baoji.fitness.ui.library.LibraryScreen
 import com.baoji.fitness.ui.library.LibraryViewModel
 import com.baoji.fitness.ui.workout.WorkoutScreen
@@ -53,7 +49,6 @@ enum class NavigationTab(val label: String, val icon: ImageVector) {
     WORKOUT("训练", LucideIcons.Dumbbell),
     ANALYTICS("负荷", LucideIcons.Activity),
     CALENDAR("日历", LucideIcons.Calendar),
-    COACH("私教", LucideIcons.Sparkles),
     LIBRARY("动作库", LucideIcons.Layers),
     BODY("身体", LucideIcons.User)
 }
@@ -63,7 +58,6 @@ fun MainScreen(
     workoutViewModel: WorkoutViewModel,
     analyticsViewModel: AnalyticsViewModel,
     calendarViewModel: CalendarViewModel,
-    coachViewModel: CoachViewModel,
     libraryViewModel: LibraryViewModel,
     repository: WorkoutRepository,
     bodyMetricRepository: BodyMetricRepository
@@ -86,8 +80,7 @@ fun MainScreen(
         ) {
             when (selectedTab) {
                 NavigationTab.WORKOUT -> WorkoutScreen(
-                    viewModel = workoutViewModel,
-                    onNavigateToCoach = { selectedTab = NavigationTab.COACH }
+                    viewModel = workoutViewModel
                 )
                 NavigationTab.ANALYTICS -> AnalyticsScreen(
                     viewModel = analyticsViewModel
@@ -95,14 +88,9 @@ fun MainScreen(
                 NavigationTab.CALENDAR -> CalendarScreen(
                     viewModel = calendarViewModel
                 )
-                NavigationTab.COACH -> CoachScreen(
-                    viewModel = coachViewModel,
-                    onApplyToWorkout = { selectedTab = NavigationTab.WORKOUT }
-                )
                 NavigationTab.LIBRARY -> LibraryScreen(
                     repository = repository,
                     createExercise = { name ->
-                        // ViewModel 内部起协程；用 CompletableDeferred 桥接成 suspend
                         val deferred = kotlinx.coroutines.CompletableDeferred<String?>()
                         libraryViewModel.createExercise(name) { deferred.complete(it) }
                         deferred.await()
@@ -128,8 +116,7 @@ private fun AppleBottomNavBar(
             .border(width = 0.5.dp, color = AppleHairline)
             .navigationBarsPadding()
             .height(58.dp)
-            // 6 个 tab（原 5 个）+「动作库」三字最宽，左右留白必须收窄，否则会挤成两行
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -149,24 +136,12 @@ private fun AppleBottomNavBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = color,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        // If Coach tab, display tiny green dot badge
-                        if (tab == NavigationTab.COACH) {
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .align(Alignment.TopEnd)
-                                    .clip(CircleShape)
-                                    .background(AppleFitnessGreen)
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tab.label,
+                        tint = color,
+                        modifier = Modifier.size(20.dp)
+                    )
                     Text(
                         text = tab.label,
                         fontSize = 10.sp,

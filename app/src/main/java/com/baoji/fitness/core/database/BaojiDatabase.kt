@@ -7,11 +7,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.baoji.fitness.core.database.dao.BodyMetricDao
-import com.baoji.fitness.core.database.dao.CoachReportDao
 import com.baoji.fitness.core.database.dao.ExerciseDao
 import com.baoji.fitness.core.database.dao.WorkoutDao
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
-import com.baoji.fitness.core.database.entity.CoachReportEntity
 import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
@@ -24,33 +22,24 @@ import kotlinx.coroutines.launch
         ExerciseEntity::class,
         WorkoutSessionEntity::class,
         WorkoutSetEntity::class,
-        BodyMetricEntity::class,
-        CoachReportEntity::class
+        BodyMetricEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class BaojiDatabase : RoomDatabase() {
     abstract fun exerciseDao(): ExerciseDao
     abstract fun workoutDao(): WorkoutDao
 
-    /** M3b：身体数据。 */
+    /** 身体数据（体重、体脂率、围度等）。 */
     abstract fun bodyMetricDao(): BodyMetricDao
-
-    /** 保存下来的私教分析报告（日历可回看）。 */
-    abstract fun coachReportDao(): CoachReportDao
 
     companion object {
         @Volatile
         private var INSTANCE: BaojiDatabase? = null
 
         /**
-         * v2 → v3：唯一的结构变更 = 新增 `body_metrics` 表（M3b 的身体数据）。
-         * 列级变更本轮为零；M1 / M2 / M3a 全部不需要迁移。
-         *
-         * SQL 必须与 `app/schemas/.../3.json` 里 Room 生成的 createSql 逐字一致，
-         * 否则运行时 schema 校验（identityHash）会直接抛异常。
-         * 由 `MigrationTest` 覆盖。
+         * v2 → v3：结构变更 = 新增 `body_metrics` 表。
          */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -73,8 +62,7 @@ abstract class BaojiDatabase : RoomDatabase() {
         }
 
         /**
-         * v3 → v4：身体数据加身高列（算 BMI）。旧行 heightCm 为 NULL（未测），
-         * 语义正确：老记录本就不知道身高。
+         * v3 → v4：身体数据加身高列（算 BMI）。
          */
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -83,8 +71,7 @@ abstract class BaojiDatabase : RoomDatabase() {
         }
 
         /**
-         * v4 → v5：新增 `coach_reports` 表（保存的私教分析）。
-         * SQL 必须与 `app/schemas/.../5.json` 逐字一致。
+         * v4 → v5：历史曾引入 `coach_reports` 表。
          */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -104,16 +91,24 @@ abstract class BaojiDatabase : RoomDatabase() {
             }
         }
 
-        fun getDatabase(context: Context, scope: CoroutineScope): BaojiDatabase {            return INSTANCE ?: synchronized(this) {
+        /**
+         * v5 → v6：移除 AI 私教功能，删除 `coach_reports` 表。
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `coach_reports`")
+            }
+        }
+
+        fun getDatabase(context: Context, scope: CoroutineScope): BaojiDatabase {
+            return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     BaojiDatabase::class.java,
                     "baoji_database"
                 )
                     .addCallback(DatabaseCallback(scope))
-                    // v3 起口径改变：M1 之后会积累真实训练史，M3b/M2 都要动 schema，
-                    // 再清一次库等于把路线图目标全抹掉。所有版本升级一律走显式迁移。
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance
@@ -123,9 +118,6 @@ abstract class BaojiDatabase : RoomDatabase() {
         private class DatabaseCallback(
             private val scope: CoroutineScope
         ) : RoomDatabase.Callback() {
-            // 种子只走 onOpen + 空表检查这一条路径：
-            // 数据库重建时不会触发 onCreate 回调，在 onCreate 里播种会导致升级后动作库为空。
-            // onOpen 每次打开都跑，COUNT 检查保证幂等，将来再 bump 版本也不会漏种。
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
                 INSTANCE?.let { database ->
@@ -139,7 +131,7 @@ abstract class BaojiDatabase : RoomDatabase() {
             }
 
             suspend fun populateDefaultExercises(dao: ExerciseDao) {
-                // 个人固定动作库（11 个），与 PresetTemplates 三日计划一一对应，改这里必须同步模板名
+                // 个人固定动作库（11 个），与 PresetTemplates 三日计划一一对应
                 val defaults = listOf(
                     // 胸部
                     ExerciseEntity(name = "卧推", targetMuscle = "胸部", secondaryMuscles = "肱三头肌, 三角肌前束", equipment = "杠铃"),

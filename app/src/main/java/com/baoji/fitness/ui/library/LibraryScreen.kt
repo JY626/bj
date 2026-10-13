@@ -460,7 +460,7 @@ private fun MetricStepper(
 }
 
 /**
- * 新建自定义动作。**只输名字**，主肌群/器械由 LLM 判定（失败回落关键词），
+ * 新建自定义动作。**只输名字**，主肌群/器械由本地规则自动判定，
  * 创建后立即出现在动作库与训练页的「添加动作」里。
  */
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,7 +1,7 @@
-# 薄肌 (Baoji) - Android 健身渐进式负荷与 AI 私教 App
+# 薄肌 (Baoji) - Android 极简渐进式负荷健身记录 App
 
-一款基于 **Kotlin + Jetpack Compose (Material 3)** 构建的现代化健身记录应用。
-专注于**极速训练记录、科学渐进式负荷量化、以及 AI 私教（规划中，当前为本地演示占位）**。界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
+一款基于 **Kotlin + Jetpack Compose (Material 3)** 构建的现代化、**100% 离线单机**健身记录应用。
+专注于**极速训练记录、科学渐进式负荷量化与身体指标追踪**。界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
 
 ---
 
@@ -16,16 +16,17 @@
 3. **渐进式负荷量化 (Progressive Overload Analytics)**：
    * **E1RM 极限拟合**：采用 Epley 经典公式 $1\text{RM} = \text{Weight} \times (1 + \text{Reps} / 30)$，以 Canvas 动态绘制力量突破曲线与 PR 标记；
    * **RP 周期容量监控**：量化每周胸/背/腿/肩/臂/核心的有效组数，对照 MEV/MAV/MRV 科学阈值；
-     一个动作同时给多个肌群计组（主动作 1.0 组 + 每个间接肌群 0.5 组，如高位下拉 = 背部 1 + 手臂 0.5）。
-   * **双重渐进协议**：基于前次首组真实数据纯次数判定加重节点（如 80kg x 8次达标 -> 建议首组冲击 82.5kg x 6次），实时显示在训练页顶部建议条；不依赖 RPE（从未采集该字段）。
-4. **AI 私教（已接入真 LLM，可离线降级）**：
-   * 三档固定分区报告：**今日 / 本周 / 近 4 周**，共用一个「生成分析」按钮；
-   * **数字统一由 Kotlin 预计算**（容量趋势、部位组数 vs MEV/MAV/MRV、停滞动作、RPE 漂移、组内衰减、推拉比），模型只负责解读成人话，不让它碰原始数据做算数；
-   * 结合**身体数据**：身高/体重/体脂率（含 BMI 与相对上次的变化）一起参与分析；
-   * 端点/Key/模型在 App 内直接配（OpenAI 兼容，如阿里云百炼），带「测试连接」与「关思考模式」（更快）；
-   * 断网 / 未配置 / 请求失败一律降级为**本地规则报告**（同一套分区），不白屏不崩。
-5. **离线优先架构 (Offline-First)**：
-   * 基于 Android Jetpack Room (SQLite) 数据库，健身房地下室弱网无痛运行。
+     一个动作同时给多个肌群计组（主动作 1.0 组 + 每个间接肌群 0.5 组，如高位下拉 = 背部 1 + 手臂 0.5）；
+   * **双重渐进协议**：基于前次首组真实数据纯次数判定加重节点（如 80kg x 8次达标 -> 建议首组冲击 82.5kg x 6次），实时显示在训练页顶部建议条。
+4. **每日记录日历与习惯追踪 (Calendar & Habits)**：
+   * 训练日打卡日历（推 / 拉 / 腿 快速辨识）；
+   * 连续训练天数（Streak）与周计划达成进度统计；
+   * 每日详情内直观查看当天完成组数、容量与当天的身体测量数据。
+5. **身体指标管理 (Body Metrics)**：
+   * 记录身高、体重、体脂率、胸围、腰围、臂围等身体指标；
+   * 自动计算 BMI 与相对上一次记录的增减变化趋势。
+6. **100% 离线优先架构 (Offline-First)**：
+   * 基于 Android Jetpack Room (SQLite) 本地数据库，无任何网络请求，健身房地下室弱网无痛运行，隐私数据 100% 本地存储。
 
 ---
 
@@ -35,19 +36,21 @@
 app/src/main/java/com/baoji/fitness/
 ├── core/
 │   ├── theme/                 # Apple OLED 黑色系、字阶排版、等宽数字 (Tabular nums)
-│   ├── designsystem/icons/    # 纯净 Lucide Compose 矢量线性图标 (Dumbbell, Activity, Sparkles, Layers 等)
+│   ├── designsystem/icons/    # 纯净 Lucide Compose 矢量线性图标 (Dumbbell, Activity, Calendar, Layers, User 等)
 │   └── database/              # Room 数据库实体、DAO 与预置经典动作种子数据 (BaojiDatabase)
 ├── domain/
-│   ├── model/                 # 核心领域模型 (WorkoutSession, WorkoutSet, MuscleVolumeStatus)
-│   └── algorithm/             # 渐进负荷与 RP 周期理论计算器 (OverloadCalculator)
+│   ├── model/                 # 核心领域模型 (WorkoutSession, WorkoutSet, WorkoutDayDetail)
+│   └── algorithm/             # 渐进负荷、RP 周期容量与肌群规则引擎 (OverloadCalculator, PeriodReviewCalculator)
 ├── data/
-│   └── repository/            # 数据仓库 (WorkoutRepository)
+│   ├── repository/            # 数据仓库 (WorkoutRepository, BodyMetricRepository)
+│   ├── reminder/              # 训练日定时通知 (WorkManager)
+│   └── settings/              # 提醒与组间休息偏好设置
 ├── ui/
-│   ├── workout/               # 训练记录主屏 & Apple Watch 悬浮休息计时条
-│   ├── analytics/             # 渐进负荷看板 & Canvas E1RM 折线图
-│   ├── calendar/              # 每日记录：训练打卡月历
-│   ├── coach/                 # AI 私教对话 & 结构化处方卡片
-│   ├── library/               # 动作库分类与生理健康档案
+│   ├── workout/               # 训练记录主屏 & 悬浮休息计时胶囊
+│   ├── analytics/             # 渐进负荷看板 & Canvas E1RM 折线图与周期容量对比
+│   ├── calendar/              # 每日记录：训练打卡月历与习惯面板
+│   ├── library/               # 动作库分类与自定义动作
+│   ├── body/                  # 身体指标管理与趋势面板
 │   └── navigation/            # 5-Tab 磨砂底部导航与路由宿主 (MainScreen)
 ├── BaojiApplication.kt        # 应用级依赖注入与 Room 初始化
 └── MainActivity.kt            # 入口 Activity 与边缘延展 (Edge-to-Edge)
@@ -58,6 +61,5 @@ app/src/main/java/com/baoji/fitness/
 ## 三、 如何在 Android Studio 中打开与运行
 
 1. 打开 **Android Studio (Ladybug 2024.2 或更高版本)**；
-2. 选择 **Open**，直接选中本项目根目录 `/Users/a123456/project/baoji`；
-3. 等待 Gradle 完成依赖解析与 Sync（网络环境需能访问 Google / Maven Central 仓库）；
-4. 连接 Android 8.0 (API 26) 以上的真机或模拟器，点击绿色 **Run (Shift + F10)** 即可构建运行。
+2. 选择 **Open**，直接选中本项目根目录；
+3. 等待 Gradle 同步完成后，点击运行按钮启动或安装至真机。

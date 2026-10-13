@@ -91,7 +91,6 @@ fun formatElapsed(totalSeconds: Long): String {
 @Composable
 fun WorkoutScreen(
     viewModel: WorkoutViewModel,
-    onNavigateToCoach: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val activeSession by viewModel.activeSession.collectAsState()
