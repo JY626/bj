@@ -22,7 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.baoji.fitness.core.designsystem.icons.LucideIcons
@@ -53,6 +57,11 @@ import com.baoji.fitness.core.theme.AppleSystemPurple
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
+import com.baoji.fitness.core.theme.AppleSystemRed
+import com.baoji.fitness.domain.algorithm.ReportSection
+import com.baoji.fitness.domain.algorithm.CoachReport
+import com.baoji.fitness.data.llm.LlmEndpoint
+import com.baoji.fitness.data.llm.LlmSettings
 
 @Composable
 fun CoachScreen(
@@ -60,10 +69,11 @@ fun CoachScreen(
     onApplyToWorkout: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val messages by viewModel.messages.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    val isReplying by viewModel.isReplying.collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    val report by viewModel.report.collectAsState()
+    val isGenerating by viewModel.isGenerating.collectAsState()
+    val scope by viewModel.scope.collectAsState()
+    var showLlmSettings by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -133,6 +143,7 @@ fun CoachScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(AppleGray6)
                     .border(1.dp, AppleHairline, RoundedCornerShape(12.dp))
+                    .clickable { showLlmSettings = true }
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -142,6 +153,18 @@ fun CoachScreen(
                     fontFamily = FontFamily.Monospace
                 )
             }
+        }
+
+        if (showLlmSettings) {
+            LlmConfigSheet(
+                settings = viewModel.llmSettings,
+                testResult = viewModel.testResult.collectAsState().value,
+                onTest = { viewModel.testConnection() },
+                onDismiss = {
+                    viewModel.clearTestResult()
+                    showLlmSettings = false
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -219,17 +242,34 @@ fun CoachScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 3. 对话
+        // 2. 分析报告 / 未生成时的引导
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (messages.isEmpty() && !isReplying) {
+            item {
+                ReportHeader(report = report, isGenerating = isGenerating, scope = scope)
+            }
+
+            item { ScopeSelector(scope = scope, onSelect = { viewModel.selectScope(it) }) }
+
+            val current = report
+            current?.let { r ->
+                r.sections.forEach { section ->
+                    item { ReportCard(section = section, source = r.source) }
+                }
+            }
+
+            if (report == null && !isGenerating) {
                 item {
                     Text(
-                        text = "上面是本地规则根据你的真实数据算出来的结论。想问更多细节，可以直接在下面提问。",
+                        text = when (scope) {
+                            CoachReport.Scope.TODAY -> "生成后我会分析你今天这一次的完成质量，**并逐个动作对比上次的成绩**（进步/持平/退步）。"
+                            CoachReport.Scope.THIS_WEEK -> "生成后我会算本周部位组数、推拉平衡、容量环比，**并说清各动作与肌群相对上次的进步**。"
+                            CoachReport.Scope.LAST_4_WEEKS -> "生成后我会看近 4 周容量趋势、停滞动作，并结合体重/体脂判断是否该减量。"
+                        },
                         fontSize = 11.sp,
                         color = AppleTextTertiary,
                         lineHeight = 16.sp
@@ -237,94 +277,11 @@ fun CoachScreen(
                 }
             }
 
-            items(messages) { msg ->
-                when (msg) {
-                    is ChatMessage.User -> UserBubble(msg.content)
-
-                    is ChatMessage.AssistantText -> AssistantBubble(
-                        content = msg.content,
-                        source = msg.source
-                    )
-
-                    is ChatMessage.ActionableCard -> PrescriptionCard(
-                        message = msg,
-                        onApplyToWorkout = onApplyToWorkout
-                    )
-                }
-            }
-
-            if (isReplying) {
-                item {
-                    Text(
-                        text = "正在分析…",
-                        fontSize = 11.sp,
-                        color = AppleTextTertiary,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-            }
-        }
-
-        // 4. Quick Action Chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            QuickPill("今天该练什么") { viewModel.sendMessage("今天该练什么？") }
-            QuickPill("哪个部位欠练") { viewModel.sendMessage("这周哪个部位练得不够？") }
-            QuickPill("怎么突破平台") { viewModel.sendMessage("我卡在平台期了，怎么突破？") }
-        }
-
-        // 5. Input Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(AppleGray6)
-                .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
-                .padding(horizontal = 6.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BasicTextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp),
-                textStyle = TextStyle(color = AppleTextPrimary, fontSize = 13.sp),
-                cursorBrush = SolidColor(AppleFitnessGreen),
-                singleLine = true,
-                decorationBox = { innerTextField ->
-                    if (inputText.isEmpty()) {
-                        Text(
-                            text = "问训练量、加重、部位安排…",
-                            color = AppleGray4,
-                            fontSize = 13.sp
-                        )
-                    }
-                    innerTextField()
-                }
-            )
-
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(AppleSystemBlue)
-                    .clickable {
-                        viewModel.sendMessage(inputText)
-                        inputText = ""
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = LucideIcons.ArrowUp,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
+            item {
+                ButtonBlock(
+                    label = if (isGenerating) "正在分析…" else "生成${scope.label}分析",
+                    enabled = !isGenerating,
+                    onClick = { viewModel.generateReport() }
                 )
             }
         }
@@ -334,83 +291,11 @@ fun CoachScreen(
 }
 
 @Composable
-private fun UserBubble(content: String) {
+private fun ReportHeader(report: CoachReportState?, isGenerating: Boolean, scope: CoachReport.Scope) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-    ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomStart = 18.dp, bottomEnd = 18.dp))
-                .background(AppleSystemBlue)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = content,
-                fontSize = 13.sp,
-                color = Color.White,
-                lineHeight = 18.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun AssistantBubble(content: String, source: ReplySource) {
-    val corner = RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 18.dp)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Start
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .clip(corner)
-                .background(AppleGray6)
-                .border(1.dp, AppleHairline, corner)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                val tint = if (source == ReplySource.LLM) AppleSystemPurple else AppleCautionOrange
-                Icon(
-                    imageVector = if (source == ReplySource.LLM) LucideIcons.Sparkles else LucideIcons.Activity,
-                    contentDescription = null,
-                    tint = tint,
-                    modifier = Modifier.size(11.dp)
-                )
-                Text(
-                    text = if (source == ReplySource.LLM) "云端模型" else "本地规则",
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = tint
-                )
-            }
-            Text(
-                text = content,
-                fontSize = 13.sp,
-                color = AppleTextPrimary,
-                lineHeight = 18.sp
-            )
-        }
-    }
-}
-
-/** M4b-2 会用到的结构化处方卡（当前不会主动产生，保留渲染分支）。 */
-@Composable
-private fun PrescriptionCard(message: ChatMessage.ActionableCard, onApplyToWorkout: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
-            .background(AppleGray6)
-            .border(1.dp, AppleHairline, RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -420,79 +305,53 @@ private fun PrescriptionCard(message: ChatMessage.ActionableCard, onApplyToWorko
                 imageVector = LucideIcons.Activity,
                 contentDescription = null,
                 tint = AppleFitnessGreen,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(13.dp)
             )
             Text(
-                text = message.title,
+                text = if (report == null) "训练体检" else "训练体检 · ${report.generatedAt}",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = AppleTextPrimary
             )
         }
-
-        Text(
-            text = message.subtitle,
-            fontSize = 12.sp,
-            color = AppleTextPrimary,
-            lineHeight = 16.sp
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(AppleGray5)
-                .border(1.dp, AppleHairline, RoundedCornerShape(14.dp))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+        if (report != null) {
             Text(
-                text = message.recommendedExercise,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AppleTextPrimary
+                text = if (report.source == ReplySource.LLM) "云端模型" else "本地规则",
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                color = if (report.source == ReplySource.LLM) AppleFitnessGreen else AppleTextTertiary
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "建议负荷: ${message.targetWeightKg} kg",
-                    fontSize = 11.sp,
-                    color = AppleTextSecondary
-                )
-                Text(
-                    text = message.targetReps,
-                    fontSize = 11.sp,
-                    color = AppleTextSecondary
-                )
-            }
         }
+    }
+}
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White)
-                .clickable { onApplyToWorkout() }
-                .padding(vertical = 9.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+/** 今日 / 本周 / 近4周 —— 单一分段控件，只控制下面那一个「生成」按钮。 */
+@Composable
+private fun ScopeSelector(scope: CoachReport.Scope, onSelect: (CoachReport.Scope) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppleGray5)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        CoachReport.Scope.entries.forEach { s ->
+            val selected = s == scope
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (selected) Color.White else Color.Transparent)
+                    .clickable { onSelect(s) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = LucideIcons.Check,
-                    contentDescription = null,
-                    tint = Color.Black,
-                    modifier = Modifier.size(14.dp)
-                )
                 Text(
-                    text = "一键应用到当前训练",
+                    text = s.label,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) Color.Black else AppleTextSecondary
                 )
             }
         }
@@ -500,24 +359,215 @@ private fun PrescriptionCard(message: ChatMessage.ActionableCard, onApplyToWorko
 }
 
 @Composable
-private fun QuickPill(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    onClick: () -> Unit
-) {
-    Row(
+private fun ReportCard(section: ReportSection, source: ReplySource) {
+    Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
             .background(AppleGray6)
-            .border(1.dp, AppleHairline, RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            .border(1.dp, AppleHairline, RoundedCornerShape(20.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        icon?.let {
-            Icon(imageVector = it, contentDescription = null, tint = AppleTextSecondary, modifier = Modifier.size(12.dp))
-        }
-        Text(text = text, fontSize = 11.sp, color = AppleTextSecondary)
+        Text(
+            text = section.title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppleFitnessGreen
+        )
+        Text(
+            text = section.body,
+            fontSize = 12.sp,
+            color = AppleTextPrimary,
+            lineHeight = 18.sp
+        )
     }
 }
+
+@Composable
+private fun ButtonBlock(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (enabled) AppleFitnessGreen else AppleGray5)
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) Color.Black else AppleTextSecondary
+        )
+    }
+}
+
+/** 方案 A：在 App 内直接配 Key / 端点 / 模型，不用重编译。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LlmConfigSheet(
+    settings: LlmSettings?,
+    testResult: String?,
+    onTest: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (settings == null) return
+    val saved by settings.endpoint.collectAsState()
+    var apiKey by remember { mutableStateOf(saved.apiKey) }
+    var baseUrl by remember { mutableStateOf(saved.baseUrl) }
+    var model by remember { mutableStateOf(saved.model) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppleGray6
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "云端私教设置",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppleTextPrimary
+            )
+            Text(
+                text = "填任何 OpenAI 兼容端点。Key 存在本机私有存储，不进 APK、不上传。" +
+                    "留空则回落到编译期 local.properties 的值。",
+                fontSize = 11.sp,
+                color = AppleTextTertiary,
+                lineHeight = 16.sp
+            )
+
+            LlmField("API Key", apiKey, secret = true) { apiKey = it }
+            LlmField("Base URL", baseUrl, placeholder = "https://api.openai.com/v1") { baseUrl = it }
+            LlmField("模型", model, placeholder = "gpt-4o-mini") { model = it }
+
+            Text(
+                text = "默认关掉思考模式，生成更快；如果模型不认这个参数（报 400），就把它关掉。",
+                fontSize = 11.sp,
+                color = AppleTextTertiary,
+                lineHeight = 16.sp
+            )
+
+            val disableThinking by settings.disableThinking.collectAsState()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("关闭思考模式（更快）", fontSize = 12.sp, color = AppleTextPrimary)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (disableThinking) AppleFitnessGreen else AppleGray5)
+                        .clickable { settings.setDisableThinking(!disableThinking) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = if (disableThinking) "已开启" else "已关闭",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (disableThinking) Color.Black else AppleTextSecondary
+                    )
+                }
+            }
+
+            Text(
+                text = if (saved.isConfigured) "当前状态：已配置 ✓" else "当前状态：未配置（使用本地规则）",
+                fontSize = 11.sp,
+                color = if (saved.isConfigured) AppleFitnessGreen else AppleCautionOrange
+            )
+
+            testResult?.let {
+                val ok = it.startsWith("连接成功")
+                Text(
+                    text = it,
+                    fontSize = 11.sp,
+                    lineHeight = 16.sp,
+                    color = if (ok) AppleFitnessGreen else AppleSystemRed
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleGray5)
+                        .clickable { onTest() }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "测试连接", fontSize = 13.sp, color = AppleTextPrimary)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleFitnessGreen)
+                        .clickable {
+                            settings.save(apiKey, baseUrl, model)
+                            onDismiss()
+                        }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "保存", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleGray5)
+                        .clickable { settings.reset() }
+                        .padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "清除", fontSize = 13.sp, color = AppleTextSecondary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LlmField(
+    label: String,
+    value: String,
+    placeholder: String = "",
+    secret: Boolean = false,
+    onChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = label, fontSize = 11.sp, color = AppleTextSecondary)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppleBlack)
+                .border(1.dp, AppleHairline, RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            if (value.isEmpty() && placeholder.isNotEmpty()) {
+                Text(text = placeholder, fontSize = 12.sp, color = AppleGray4)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 12.sp, color = AppleTextPrimary),
+                cursorBrush = SolidColor(AppleFitnessGreen),
+                visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+

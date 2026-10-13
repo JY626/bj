@@ -21,6 +21,8 @@ data class BodyMetricEntity(
     val date: Long,
     val weightKg: Double? = null,
     val bodyFatPct: Double? = null,
+    /** 身高，用于算 BMI。不常变，但写一次会一直往后沿用。 */
+    val heightCm: Double? = null,
     val chestCm: Double? = null,
     val waistCm: Double? = null,
     val armCm: Double? = null,

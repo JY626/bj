@@ -39,11 +39,13 @@ import com.baoji.fitness.data.repository.BodyMetricRepository
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.ui.analytics.AnalyticsScreen
 import com.baoji.fitness.ui.analytics.AnalyticsViewModel
+import com.baoji.fitness.ui.body.BodyScreen
 import com.baoji.fitness.ui.calendar.CalendarScreen
 import com.baoji.fitness.ui.calendar.CalendarViewModel
 import com.baoji.fitness.ui.coach.CoachScreen
 import com.baoji.fitness.ui.coach.CoachViewModel
 import com.baoji.fitness.ui.library.LibraryScreen
+import com.baoji.fitness.ui.library.LibraryViewModel
 import com.baoji.fitness.ui.workout.WorkoutScreen
 import com.baoji.fitness.ui.workout.WorkoutViewModel
 
@@ -52,7 +54,8 @@ enum class NavigationTab(val label: String, val icon: ImageVector) {
     ANALYTICS("负荷", LucideIcons.Activity),
     CALENDAR("日历", LucideIcons.Calendar),
     COACH("私教", LucideIcons.Sparkles),
-    LIBRARY("动作库", LucideIcons.Layers)
+    LIBRARY("动作库", LucideIcons.Layers),
+    BODY("身体", LucideIcons.User)
 }
 
 @Composable
@@ -61,6 +64,7 @@ fun MainScreen(
     analyticsViewModel: AnalyticsViewModel,
     calendarViewModel: CalendarViewModel,
     coachViewModel: CoachViewModel,
+    libraryViewModel: LibraryViewModel,
     repository: WorkoutRepository,
     bodyMetricRepository: BodyMetricRepository
 ) {
@@ -97,6 +101,14 @@ fun MainScreen(
                 )
                 NavigationTab.LIBRARY -> LibraryScreen(
                     repository = repository,
+                    createExercise = { name ->
+                        // ViewModel 内部起协程；用 CompletableDeferred 桥接成 suspend
+                        val deferred = kotlinx.coroutines.CompletableDeferred<String?>()
+                        libraryViewModel.createExercise(name) { deferred.complete(it) }
+                        deferred.await()
+                    }
+                )
+                NavigationTab.BODY -> BodyScreen(
                     bodyMetricRepository = bodyMetricRepository
                 )
             }
@@ -116,7 +128,8 @@ private fun AppleBottomNavBar(
             .border(width = 0.5.dp, color = AppleHairline)
             .navigationBarsPadding()
             .height(58.dp)
-            .padding(horizontal = 24.dp),
+            // 6 个 tab（原 5 个）+「动作库」三字最宽，左右留白必须收窄，否则会挤成两行
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -130,8 +143,9 @@ private fun AppleBottomNavBar(
 
                 Column(
                     modifier = Modifier
+                        .weight(1f)
                         .clickable { onTabSelected(tab) }
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
@@ -156,6 +170,7 @@ private fun AppleBottomNavBar(
                     Text(
                         text = tab.label,
                         fontSize = 10.sp,
+                        maxLines = 1,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                         color = color
                     )

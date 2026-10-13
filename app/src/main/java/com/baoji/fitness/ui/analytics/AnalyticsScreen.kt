@@ -40,6 +40,7 @@ import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.domain.algorithm.ReviewPeriod
 import com.baoji.fitness.domain.algorithm.TrendPoint
+import com.baoji.fitness.domain.model.formatSets
 import com.baoji.fitness.ui.components.ChartPoint
 import com.baoji.fitness.ui.components.MinimalLineChart
 
@@ -213,7 +214,7 @@ fun AnalyticsScreen(
                         VolumeProgressBar(
                             muscle = status.muscleGroup,
                             current = status.completedSets,
-                            previous = previous?.completedSets ?: 0,
+                            previous = previous?.completedSets ?: 0.0,
                             target = status.mav,
                             color = color,
                             label = status.statusText
@@ -511,8 +512,8 @@ private fun DeltaBadge(deltaPct: Double?) {
 @Composable
 private fun VolumeProgressBar(
     muscle: String,
-    current: Int,
-    previous: Int,
+    current: Double,
+    previous: Double,
     target: Int,
     color: Color,
     label: String
@@ -528,7 +529,7 @@ private fun VolumeProgressBar(
         ) {
             Text(text = muscle, fontSize = 12.sp, color = AppleTextPrimary)
             Text(
-                text = "$current / $safeTarget 组 · $label",
+                text = "${formatSets(current)} / $safeTarget 组 · $label",
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
                 color = color
@@ -571,7 +572,7 @@ private fun VolumeProgressBar(
                 )
             }
             Text(
-                text = " 上周 $previous",
+                text = " 上周 ${formatSets(previous)}",
                 fontSize = 9.sp,
                 fontFamily = FontFamily.Monospace,
                 color = AppleTextTertiary

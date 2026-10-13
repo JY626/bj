@@ -23,7 +23,9 @@ data class ReminderConfig(
      * M4b 隐私开关：**必须**由用户显式打开才会把训练摘要发给大模型。
      * 默认关，因为备注与身体数据都会外发。
      */
-    val llmSharingEnabled: Boolean = false
+    val llmSharingEnabled: Boolean = false,
+    /** 默认组间休息秒数（打勾后自动开始）。大重量复合动作可调到 180。 */
+    val restSeconds: Int = 90
 )
 
 class ReminderSettings(context: Context) {
@@ -52,6 +54,7 @@ class ReminderSettings(context: Context) {
             .putInt(KEY_MINUTE, config.minute)
             .putStringSet(KEY_DAYS, config.trainingDays.map { it.name }.toSet())
             .putBoolean(KEY_LLM_SHARING, config.llmSharingEnabled)
+            .putInt(KEY_REST_SECONDS, config.restSeconds)
             .apply()
         _config.value = config
         ReminderScheduler.apply(appContext, config)
@@ -61,6 +64,7 @@ class ReminderSettings(context: Context) {
     fun setTime(hour: Int, minute: Int) = update(_config.value.copy(hour = hour, minute = minute))
     fun setTrainingDays(days: Set<DayOfWeek>) = update(_config.value.copy(trainingDays = days))
     fun setLlmSharing(enabled: Boolean) = update(_config.value.copy(llmSharingEnabled = enabled))
+    fun setRestSeconds(seconds: Int) = update(_config.value.copy(restSeconds = seconds.coerceIn(30, 300)))
 
     private fun read(): ReminderConfig {
         val days = prefs.getStringSet(KEY_DAYS, null)
@@ -71,7 +75,8 @@ class ReminderSettings(context: Context) {
             hour = prefs.getInt(KEY_HOUR, 20),
             minute = prefs.getInt(KEY_MINUTE, 0),
             trainingDays = days ?: ReminderConfig().trainingDays,
-            llmSharingEnabled = prefs.getBoolean(KEY_LLM_SHARING, false)
+            llmSharingEnabled = prefs.getBoolean(KEY_LLM_SHARING, false),
+            restSeconds = prefs.getInt(KEY_REST_SECONDS, 90)
         )
     }
 
@@ -82,5 +87,6 @@ class ReminderSettings(context: Context) {
         private const val KEY_MINUTE = "reminder_minute"
         private const val KEY_DAYS = "reminder_training_days"
         private const val KEY_LLM_SHARING = "llm_sharing_enabled"
+        private const val KEY_REST_SECONDS = "rest_seconds"
     }
 }

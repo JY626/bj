@@ -78,6 +78,104 @@ class MigrationTest {
         }
     }
 
+    /**
+     * v3 → v4：身体数据加身高列。旧行 heightCm 为 NULL，且不能把旧的身体数据弄丢。
+     */
+    @Test
+    fun migrate3To4_addsHeightAndKeepsExistingBodyMetrics() {
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                "INSERT INTO body_metrics (date, weightKg, bodyFatPct, chestCm, waistCm, armCm, note) " +
+                    "VALUES (1000, 73.5, 15.2, 100.0, 80.0, 35.0, 'ok')"
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, BaojiDatabase.MIGRATION_3_4).use { db ->
+            assertEquals(1, count(db, "body_metrics"))
+            db.query("SELECT weightKg, bodyFatPct, heightCm, waistCm FROM body_metrics WHERE date = 1000").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(73.5, c.getDouble(0), 0.001)
+                assertEquals(15.2, c.getDouble(1), 0.001)
+                assertTrue("旧行身高应为 NULL（未测量）", c.isNull(2))
+                assertEquals(80.0, c.getDouble(3), 0.001)
+            }
+            // 新列可写
+            db.execSQL("UPDATE body_metrics SET heightCm = 175.0 WHERE date = 1000")
+            db.query("SELECT heightCm FROM body_metrics WHERE date = 1000").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(175.0, c.getDouble(0), 0.001)
+            }
+        }
+    }
+
+    /** v2 用户升级到 v4：必须能走 2→3→4 两跳，数据一条不少。 */
+    @Test
+    fun migrate2To4_chainsBothMigrations() {
+        helper.createDatabase(TEST_DB, 2).use { db -> seedV2(db) }
+
+        helper.runMigrationsAndValidate(
+            TEST_DB, 4, true, BaojiDatabase.MIGRATION_2_3, BaojiDatabase.MIGRATION_3_4
+        ).use { db ->
+            assertEquals(2, count(db, "workout_sessions"))
+            assertEquals(31, count(db, "workout_sets"))
+            assertEquals(0, count(db, "body_metrics"))
+        }
+    }
+
+    /**
+     * v4 → v5：新增 coach_reports 表。旧数据纹丝不动，(date, scope) 唯一索引要真的挡住重复。
+     */
+    @Test
+    fun migrate4To5_addsCoachReportsWithUniqueDayScope() {
+        helper.createDatabase(TEST_DB, 4).use { db ->
+            db.execSQL("INSERT INTO body_metrics (date, weightKg, heightCm, note) VALUES (1000, 73.5, 175.0, '')")
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, BaojiDatabase.MIGRATION_4_5).use { db ->
+            assertEquals("旧身体数据不能丢", 1, count(db, "body_metrics"))
+            assertEquals(0, count(db, "coach_reports"))
+
+            db.execSQL(
+                "INSERT INTO coach_reports (date, scope, content, source, generatedAt) " +
+                    "VALUES (1000, 'TODAY', '## 今天做了什么\n练了。', 'LLM', 5)"
+            )
+            assertEquals(1, count(db, "coach_reports"))
+
+            // 同一天同一范围必须被唯一索引挡住（应用层用 REPLACE 覆盖）
+            try {
+                db.execSQL(
+                    "INSERT INTO coach_reports (date, scope, content, source, generatedAt) " +
+                        "VALUES (1000, 'TODAY', '重复', 'LOCAL', 6)"
+                )
+                fail("(date, scope) 唯一索引缺失")
+            } catch (expected: SQLiteConstraintException) {
+                // 符合预期
+            }
+
+            // 但同一天的不同范围可以共存
+            db.execSQL(
+                "INSERT INTO coach_reports (date, scope, content, source, generatedAt) " +
+                    "VALUES (1000, 'THIS_WEEK', '## 总体判断\n还行。', 'LOCAL', 7)"
+            )
+            assertEquals(2, count(db, "coach_reports"))
+        }
+    }
+
+    /** v2 用户直升 v5：三跳迁移链必须通。 */
+    @Test
+    fun migrate2To5_chainsAllMigrations() {
+        helper.createDatabase(TEST_DB, 2).use { db -> seedV2(db) }
+
+        helper.runMigrationsAndValidate(
+            TEST_DB, 5, true,
+            BaojiDatabase.MIGRATION_2_3, BaojiDatabase.MIGRATION_3_4, BaojiDatabase.MIGRATION_4_5
+        ).use { db ->
+            assertEquals(2, count(db, "workout_sessions"))
+            assertEquals(31, count(db, "workout_sets"))
+            assertEquals(0, count(db, "coach_reports"))
+        }
+    }
+
     /** 回放设备上真实的 v2 数据形态（11 动作 / 2 会话 / 31 组）。 */
     private fun seedV2(db: SupportSQLiteDatabase) {
         db.execSQL(

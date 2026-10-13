@@ -74,6 +74,19 @@ import java.util.Locale
 
 fun formatWeight(w: Double): String = if (w % 1.0 == 0.0) w.toInt().toString() else w.toString()
 
+/**
+ * 已用时 → `32:15`；超过 1 小时给 `1:05:30`（不显示 `65:30`，那读不出“一小时”）。
+ * 纯函数，便于单测。
+ */
+fun formatElapsed(totalSeconds: Long): String {
+    val s = totalSeconds.coerceAtLeast(0L)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m, sec)
+    else String.format(Locale.US, "%02d:%02d", m, sec)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutScreen(
@@ -88,12 +101,15 @@ fun WorkoutScreen(
     val isTimerVisible by viewModel.isRestTimerVisible.collectAsState()
     val todaySummary by viewModel.todaySummary.collectAsState()
     val habit by viewModel.habit.collectAsState()
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
 
     val haptic = LocalHapticFeedback.current
 
     var showAddExerciseSheet by remember { mutableStateOf(false) }
     var showSummaryDialog by remember { mutableStateOf(false) }
     var showTemplateSheet by remember { mutableStateOf(false) }
+    // 折叠已完成动作：练到第 6 个动作时不用一路往下滚
+    var hideCompletedExercises by remember { mutableStateOf(false) }
     var activeEditingSet by remember { mutableStateOf<Pair<ExerciseEntity, WorkoutSetEntity>?>(null) }
 
     val dateFormat = remember { SimpleDateFormat("M月d日 EEEE", Locale.CHINESE) }
@@ -265,6 +281,11 @@ fun WorkoutScreen(
                             label = "完成组数",
                             value = "${completedSets.size}/$totalSetsCount",
                             valueColor = AppleFitnessGreen
+                        )
+                        MetricItem(
+                            label = "本次用时",
+                            value = formatElapsed(elapsedSeconds),
+                            unit = null
                         )
                     }
                 }
@@ -448,8 +469,45 @@ fun WorkoutScreen(
                 }
             }
 
-            // 4. Exercise Cards List
-            items(exerciseGroups, key = { it.exercise.id }) { group ->
+            // 4. 折叠开关（仅训练中、且有已完成动作时才显示）
+            if (activeSession != null && exerciseGroups.any { g -> g.sets.all { it.isCompleted } }) {
+                item(key = "collapse-toggle") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppleGray6)
+                            .border(1.dp, AppleHairline, RoundedCornerShape(14.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                hideCompletedExercises = !hideCompletedExercises
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (hideCompletedExercises) "显示已完成动作" else "折叠已完成动作",
+                            fontSize = 12.sp,
+                            color = AppleTextSecondary
+                        )
+                        val doneCount = exerciseGroups.count { g -> g.sets.all { it.isCompleted } }
+                        Text(
+                            text = "$doneCount 个已完成",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = AppleFitnessGreen
+                        )
+                    }
+                }
+            }
+
+            // 5. Exercise Cards List
+            items(
+                if (hideCompletedExercises) exerciseGroups.filterNot { g -> g.sets.all { it.isCompleted } }
+                else exerciseGroups,
+                key = { it.exercise.id }
+            ) { group ->
                 ExerciseCard(
                     group = group,
                     onToggleSet = {
@@ -471,7 +529,7 @@ fun WorkoutScreen(
                 )
             }
 
-            // 5. Add Exercise Button
+            // 6. Add Exercise Button
             if (activeSession != null) {
             item {
                 Box(

@@ -8,6 +8,7 @@ import com.baoji.fitness.core.database.entity.WorkoutSetEntity
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.data.settings.ReminderSettings
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
+import com.baoji.fitness.domain.algorithm.SessionDayGate
 import com.baoji.fitness.domain.algorithm.StreakCalculator
 import com.baoji.fitness.domain.model.PresetTemplates
 import com.baoji.fitness.domain.model.WorkoutDayDetail
@@ -98,16 +99,45 @@ class WorkoutViewModel(
     val allExercises: StateFlow<List<ExerciseEntity>> = repository.getAllExercises()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * 「今天是哪天」的可观察版本：App 常在后台活过午夜，写死 `LocalDate.now()` 会导致
+     * 跨天后仍展示昨天的归档明细/打卡状态。这里用一个可变的"今天"，
+     * 由 [rollOverIfNewDay] 在回到前台时推进。
+     */
+    private val _today = MutableStateFlow(LocalDate.now())
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun rollOverIfNewDay() {
+        val actual = LocalDate.now()
+        if (actual != _today.value) _today.value = actual
+        viewModelScope.launch { archiveIdlePastSessions(System.currentTimeMillis()) }
+    }
+
+    /**
+     * 归档「过期且已闲置」的会话。只归档、**绝不自动开新场**。
+     * 自动开新场会在每次冷启动都生一场垃圾会话（曾经的 bug）。
+     */
+    private suspend fun archiveIdlePastSessions(now: Long) {
+        val stale = SessionDayGate.sessionsToArchive(
+            activeSessions = repository.getActiveSessions(),
+            sets = repository.getAllCompletedSets().first(),
+            now = now
+        )
+        if (stale.isNotEmpty()) repository.archiveSessions(stale)
+    }
+
     /** 今日已完成（归档）训练的明细：会话结束后训练页仍然展示当天数据。 */
-    val todaySummary: StateFlow<WorkoutDayDetail?> = repository.getDayDetail(LocalDate.now())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val todaySummary: StateFlow<WorkoutDayDetail?> = _today
+        .flatMapLatest { repository.getDayDetail(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** M2：归档态的习惯文案数据。 */
     val habit: StateFlow<WorkoutHabit> = combine(
         repository.getTrainedDayTypes(),
-        reminderSettings.config
-    ) { days, config ->
-        val today = LocalDate.now()
+        reminderSettings.config,
+        _today
+    ) { days, config, today ->
         WorkoutHabit(
             currentStreak = StreakCalculator.currentStreak(days.keys, today),
             isRestDayTomorrow = StreakCalculator.isRestDayTomorrow(today, config.trainingDays)
@@ -123,14 +153,38 @@ class WorkoutViewModel(
 
     private var timerJob: Job? = null
 
+    /**
+     * 本次训练已用时（秒）。会话开始时起算，每秒推进。
+     * 用 ticker 而不是在 Composable 里重算 —— 后者只在重组时刷新，不会走秒。
+     */
+    private val _elapsedSeconds = MutableStateFlow(0L)
+    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
+
+    private var sessionTickerJob: Job? = null
+
+    private fun startSessionTicker(startTime: Long) {
+        sessionTickerJob?.cancel()
+        sessionTickerJob = viewModelScope.launch {
+            while (true) {
+                _elapsedSeconds.value = ((System.currentTimeMillis() - startTime) / 1000L).coerceAtLeast(0L)
+                delay(1000)
+            }
+        }
+    }
+
     init {
         viewModelScope.launch {
-            // One-shot check on initial startup: only bootstrap if no active session AND no prior sessions exist
+            // 跨天：把「开始日早于今天、且已闲置 6h」的会话归档。
+            // 只归档，不自动开新场 —— 开新场交给用户点「计划」。
+            archiveIdlePastSessions(System.currentTimeMillis())
+
             val currentActive = repository.getActiveSession().first()
+            currentActive?.let { startSessionTicker(it.startTime) }
             when {
                 currentActive == null -> {
-                    val allSessions = repository.getAllSessions().first()
-                    if (allSessions.isEmpty()) {
+                    // 全新安装（一条会话都没有）：给一场推日，否则首页没东西可点。
+                    // 已有历史时保持归档态，让用户自己选今天练哪天。
+                    if (repository.getAllSessions().first().isEmpty()) {
                         startNewWorkoutFromTemplate(PresetTemplates.PUSH)
                     }
                 }
@@ -148,6 +202,8 @@ class WorkoutViewModel(
     fun startNewWorkoutFromTemplate(template: WorkoutRoutineTemplate) {
         viewModelScope.launch {
             val sessionId = repository.startNewSession(template.name)
+            // 新场次：计时归零重走
+            startSessionTicker(System.currentTimeMillis())
 
             // 核心功能：优先读取上一次该训练日实际做过的动作列表（动态记忆用户习惯）
             val previousExerciseIds = repository.getPreviousExerciseIdsForRoutine(template.name)
@@ -203,6 +259,7 @@ class WorkoutViewModel(
     fun startCustomWorkout(title: String) {
         viewModelScope.launch {
             repository.startNewSession(title.ifBlank { "自定义训练日" })
+            startSessionTicker(System.currentTimeMillis())
         }
     }
 
@@ -231,7 +288,8 @@ class WorkoutViewModel(
                 if (nextOpenSet != null) {
                     repository.updateSetWeightAndReps(nextOpenSet, set.weightKg, set.reps)
                 }
-                startRestTimer(90)
+                // 休息时长由设置决定，不再写死 90s（复合动作该给更久）
+                startRestTimer(reminderSettings.config.value.restSeconds)
             }
         }
     }
@@ -308,6 +366,9 @@ class WorkoutViewModel(
             repository.finishSession(session, totalVolume, notes.trim())
             _isRestTimerVisible.value = false
             timerJob?.cancel()
+            // 归档后停掉计时，归零（下次开练重新计）
+            sessionTickerJob?.cancel()
+            _elapsedSeconds.value = 0L
         }
     }
 

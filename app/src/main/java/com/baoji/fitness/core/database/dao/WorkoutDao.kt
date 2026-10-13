@@ -15,6 +15,10 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_sessions WHERE status = 'ACTIVE' ORDER BY id DESC LIMIT 1")
     fun getActiveSession(): Flow<WorkoutSessionEntity?>
 
+    /** 所有未归档会话，供跨天清理使用。 */
+    @Query("SELECT * FROM workout_sessions WHERE status = 'ACTIVE'")
+    suspend fun getActiveSessions(): List<WorkoutSessionEntity>
+
     @Query("SELECT * FROM workout_sessions WHERE id = :sessionId")
     fun getSessionById(sessionId: Long): Flow<WorkoutSessionEntity?>
 
@@ -37,9 +41,6 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_sets WHERE sessionId = :sessionId AND exerciseId = :exerciseId ORDER BY setOrder ASC, id ASC")
     suspend fun getSetsForExerciseInSession(sessionId: Long, exerciseId: Long): List<WorkoutSetEntity>
 
-    @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 ORDER BY completedAt DESC LIMIT :limit")
-    suspend fun getLastCompletedSetsForExercise(exerciseId: Long, limit: Int = 10): List<WorkoutSetEntity>
-
     @Query("SELECT * FROM workout_sets WHERE exerciseId = :exerciseId AND isCompleted = 1 AND sessionId != :currentSessionId ORDER BY completedAt DESC, id DESC")
     suspend fun getHistoricalCompletedSets(exerciseId: Long, currentSessionId: Long): List<WorkoutSetEntity>
 
@@ -54,9 +55,6 @@ interface WorkoutDao {
 
     @Delete
     suspend fun deleteSet(set: WorkoutSetEntity)
-
-    @Query("DELETE FROM workout_sets WHERE sessionId = :sessionId")
-    suspend fun deleteSetsForSession(sessionId: Long)
 
     @Query("SELECT * FROM workout_sets WHERE completedAt >= :sinceTimestamp AND isCompleted = 1")
     fun getCompletedSetsSince(sinceTimestamp: Long): Flow<List<WorkoutSetEntity>>

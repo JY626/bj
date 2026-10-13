@@ -1,6 +1,7 @@
 package com.baoji.fitness.domain.algorithm
 
 import com.baoji.fitness.domain.model.MuscleVolumeStatus
+import com.baoji.fitness.domain.model.formatSets
 import java.util.Locale
 
 /**
@@ -86,21 +87,22 @@ object CoachNarrator {
             .filter { it.completedSets < it.mev }
             .minByOrNull { it.completedSets - it.mev }
         val onTarget = input.muscleVolumes
-            .filter { it.completedSets in it.mev..it.mav }
+            .filter { it.completedSets >= it.mev && it.completedSets <= it.mav }
             .maxByOrNull { it.completedSets }
 
         val parts = mutableListOf<String>()
         lagging?.let {
-            parts += if (it.completedSets == 0) {
+            val sets = formatSets(it.completedSets)
+            parts += if (it.completedSets == 0.0) {
                 "${it.muscleGroup}这周一组都没练（MEV ${it.mev}）"
             } else {
-                "${it.muscleGroup}只有 ${it.completedSets} 组，低于 MEV(${it.mev})"
+                "${it.muscleGroup}只有 $sets 组，低于 MEV(${it.mev})"
             }
         }
-        onTarget?.let { parts += "${it.muscleGroup} ${it.completedSets} 组正处在 MAV 区间" }
+        onTarget?.let { parts += "${it.muscleGroup} ${formatSets(it.completedSets)} 组正处在 MAV 区间" }
         if (parts.isEmpty()) {
             val over = input.muscleVolumes.maxByOrNull { it.completedSets } ?: return null
-            parts += "${over.muscleGroup} ${over.completedSets} 组已经顶到 MRV(${over.mrv}) 附近，注意别过量"
+            parts += "${over.muscleGroup} ${formatSets(over.completedSets)} 组已经顶到 MRV(${over.mrv}) 附近，注意别过量"
         }
         return parts.joinToString("；") + "。"
     }
@@ -129,20 +131,30 @@ object CoachNarrator {
     }
 
     private fun noteLine(input: CoachInput): String {
-        val note = input.recentNotes.firstOrNull()
+        val notes = input.recentNotes.filter { it.isNotBlank() }
+        val note = notes.firstOrNull()
             ?: return "训练后在完成弹窗里记一句感受，我下次能给出更准的建议。"
+
+        // 拿到 3 条就全用上：最近一条决定主建议，全部条数统计趋势。
+        // 上次只取第一条 → DAO 读 3 条白读。
+        val pattern = if (notes.size < 2) "" else {
+            val hits = notes.count { n ->
+                n.contains("睡眠") || n.contains("累") || n.contains("疲劳")
+            }
+            if (hits > 0) "（最近 ${notes.size} 次里有 $hits 次提到状态不佳）" else ""
+        }
 
         return when {
             note.contains("睡眠") ->
-                "上次备注「$note」，若今晚仍睡不好，主项重量下调一档。"
+                "上次备注「$note」$pattern，若今晚仍睡不好，主项重量下调一档。"
             note.contains("累") || note.contains("疲劳") ->
-                "上次备注「$note」，先做 2 组试探，状态回来再加回去。"
+                "上次备注「$note」$pattern，先做 2 组试探，状态回来再加回去。"
             note.contains("痛") || note.contains("疼") || note.contains("伤") ->
                 "上次备注提到「$note」，相关动作先降重量、缩小行程，别硬顶。"
             note.contains("好") ->
                 "上次备注「$note」，可以按计划冲击加重。"
             else ->
-                "上次备注「$note」，按原计划推进即可。"
+                "上次备注「$note」$pattern，按原计划推进即可。"
         }
     }
 

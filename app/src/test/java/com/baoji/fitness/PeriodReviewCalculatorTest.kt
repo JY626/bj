@@ -226,7 +226,7 @@ class PeriodReviewCalculatorTest {
      * `getWeeklyMuscleComparison` 提供，不进周期回顾（否则「本月」必然被判过度训练）。
      */
     @Test
-    fun muscleSetCountsSkipsWarmupUncompletedAndUntrackedMuscles() {
+    fun muscleSetCountsSkipsWarmupAndUncompleted() {
         val sets = listOf(
             set(1, 1, chest.id, 80.0, 8, completedAt = at(today, LocalTime.of(9, 0))),
             set(2, 1, chest.id, 80.0, 8, completedAt = at(today, LocalTime.of(9, 5))),
@@ -238,8 +238,48 @@ class PeriodReviewCalculatorTest {
 
         val counts = PeriodReviewCalculator.muscleSetCounts(sets, exercises)
 
-        assertEquals(mapOf("胸部" to 2, "背部" to 1), counts)
-        assertTrue("核心不在 5 大追踪部位内", "核心" !in counts)
+        // 热身与未完成不计，核心已被纳入追踪
+        assertEquals(mapOf("胸部" to 2.0, "背部" to 1.0, "核心" to 1.0), counts)
+    }
+
+    /**
+     * 本次修复的核心：一个动作同时给多个肌群计组 —— 高位下拉既算背部(1.0)也算手臂(0.5)。
+     * 修复前手臂只能靠「二头弯举」一个动作，拉日练完仍是 0 组。
+     */
+    @Test
+    fun oneExerciseContributesToBothPrimaryAndSecondaryMuscles() {
+        val latPullDown = ExerciseEntity(
+            id = 10, name = "高位下拉", targetMuscle = "背部",
+            secondaryMuscles = "肱二头肌", equipment = "绳索"
+        )
+        val bench = ExerciseEntity(
+            id = 11, name = "卧推", targetMuscle = "胸部",
+            secondaryMuscles = "肱三头肌, 三角肌前束", equipment = "杠铃"
+        )
+        val sets = listOf(
+            set(1, 1, latPullDown.id, 60.0, 10, completedAt = at(today, LocalTime.of(9, 0))),
+            set(2, 1, bench.id, 80.0, 8, completedAt = at(today, LocalTime.of(9, 5)))
+        )
+
+        val counts = PeriodReviewCalculator.muscleSetCounts(sets, listOf(latPullDown, bench))
+
+        assertEquals(1.0, counts["背部"]!!, 0.001)   // 高位下拉主肌群
+        assertEquals(1.0, counts["手臂"]!!, 0.001)   // 高位下拉的间接（肱二头）+ 卧推的间接（肱三头）= 0.5+0.5
+        assertEquals(0.5, counts["肩部"]!!, 0.001)   // 卧推的三角肌前束
+        assertEquals(1.0, counts["胸部"]!!, 0.001)
+    }
+
+    /** 细分名→大类的桥接：三束都要归到肩部，「核心」是单独一类。 */
+    @Test
+    fun secondaryMuscleNamesMapToTrackedGroups() {
+        assertEquals("肩部", PeriodReviewCalculator.secondaryMuscleGroup("三角肌前束"))
+        assertEquals("肩部", PeriodReviewCalculator.secondaryMuscleGroup("三角肌中束"))
+        assertEquals("肩部", PeriodReviewCalculator.secondaryMuscleGroup("三角肌后束"))
+        assertEquals("手臂", PeriodReviewCalculator.secondaryMuscleGroup("肱三头肌"))
+        assertEquals("腿部", PeriodReviewCalculator.secondaryMuscleGroup("股四头肌"))
+        assertEquals("核心", PeriodReviewCalculator.secondaryMuscleGroup("腹直肌"))
+        assertNull(PeriodReviewCalculator.secondaryMuscleGroup("全身"))
+        assertNull(PeriodReviewCalculator.secondaryMuscleGroup(""))
     }
 
     @Test
@@ -300,4 +340,41 @@ class PeriodReviewCalculatorTest {
         // 上期 = 再往前 8 周，两块窗口必须首尾相接
         assertEquals(eight.current.from, eight.previous!!.toExclusive)
     }
+
+    /**
+     * 回归：**间接肌群与主肌群同类时，不能被降成 0.5**。
+     *
+     * 真实 bug：`buildMap + put` 会让「三角肌前束」（归肩部）覆盖主肌群的 1.0，
+     * 史密斯推肩 7 组被算成 3.5。11 个种子动作里 9 个中招。
+     */
+    @Test
+    fun secondaryFromSameGroupDoesNotDowngradePrimary() {
+        val shoulderPress = ExerciseEntity(
+            id = 20, name = "史密斯推肩", targetMuscle = "肩部",
+            secondaryMuscles = "三角肌前束, 三头肌", equipment = "史密斯"
+        )
+        val sets = (1..7).map {
+            set(it.toLong(), 1, shoulderPress.id, 25.0, 10, completedAt = at(today, LocalTime.of(19, it)))
+        }
+
+        val counts = PeriodReviewCalculator.muscleSetCounts(sets, listOf(shoulderPress))
+
+        assertEquals("主肌群必须计满 7 组，不能被间接的 0.5 覆盖", 7.0, counts["肩部"]!!, 0.001)
+        assertEquals("三头肌作为间接，另计 3.5 组", 3.5, counts["手臂"]!!, 0.001)
+    }
+
+    /** 主肌群与间接同类时，取较大者而非相加（不能把 7 组算成 10.5）。 */
+    @Test
+    fun sameGroupContributionIsMaxNotSum() {
+        val ex = ExerciseEntity(
+            id = 21, name = "测试动作", targetMuscle = "背部",
+            secondaryMuscles = "背阔肌", equipment = "杠铃"
+        )
+        val sets = (1..4).map {
+            set(it.toLong(), 1, ex.id, 50.0, 8, completedAt = at(today, LocalTime.of(19, it)))
+        }
+        val counts = PeriodReviewCalculator.muscleSetCounts(sets, listOf(ex))
+        assertEquals("4 组不能变成 4.5 或 6", 4.0, counts["背部"]!!, 0.001)
+    }
 }
+

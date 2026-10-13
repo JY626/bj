@@ -64,8 +64,11 @@ object OverloadCalculator {
 
     /**
      * RP (Renaissance Periodization) 运动周期理论：周有效组数评估
+     *
+     * 组数带小数（主 1.0 + 间接 0.5），所以阈值判定用带容差的比较，不能用 `in` /
+     * `IntRange`（Double 永远不满足 `in`，会把所有部位判进最后一个分支 → 全员「过度训练」）。
      */
-    fun evaluateMuscleVolume(muscle: String, completedSets: Int): MuscleVolumeStatus {
+    fun evaluateMuscleVolume(muscle: String, completedSets: Double): MuscleVolumeStatus {
         val (mev, mav, mrv) = when (muscle) {
             "胸部" -> Triple(10, 16, 22)
             "背部" -> Triple(10, 16, 22)
@@ -77,8 +80,8 @@ object OverloadCalculator {
 
         val statusText = when {
             completedSets < mev -> "低于最低有效容量 (欠练)"
-            completedSets in mev..mav -> "最佳超量恢复与增肌区间 (MAV)"
-            completedSets in (mav + 1)..mrv -> "高容量疲劳累积中"
+            completedSets <= mav -> "最佳超量恢复与增肌区间 (MAV)"
+            completedSets <= mrv -> "高容量疲劳累积中"
             else -> "超过最大恢复容量 (过度训练风险)"
         }
 

@@ -14,11 +14,23 @@ import org.junit.Test
 class CoachNarratorTest {
 
     private fun volume(muscle: String, sets: Int) = when (muscle) {
-        "胸部" -> MuscleVolumeStatus("胸部", sets, 10, 16, 22, "x")
-        "背部" -> MuscleVolumeStatus("背部", sets, 10, 16, 22, "x")
-        "腿部" -> MuscleVolumeStatus("腿部", sets, 12, 18, 24, "x")
-        "肩部" -> MuscleVolumeStatus("肩部", sets, 8, 14, 20, "x")
-        else -> MuscleVolumeStatus("手臂", sets, 8, 14, 18, "x")
+        "胸部" -> MuscleVolumeStatus("胸部", sets.toDouble(), 10, 16, 22, "x")
+        "背部" -> MuscleVolumeStatus("背部", sets.toDouble(), 10, 16, 22, "x")
+        "腿部" -> MuscleVolumeStatus("腿部", sets.toDouble(), 12, 18, 24, "x")
+        "肩部" -> MuscleVolumeStatus("肩部", sets.toDouble(), 8, 14, 20, "x")
+        else -> MuscleVolumeStatus("手臂", sets.toDouble(), 8, 14, 18, "x")
+    }
+
+    /** 间接组会是 0.5 结尾的小数，文案不能退化成 9.5 / 10 混搭的形式。 */
+    @Test
+    fun fractionalSetsRenderWithOneDecimal() {
+        val briefing = CoachNarrator.brief(
+            CoachInput(
+                sessionCount = 1,
+                muscleVolumes = listOf(MuscleVolumeStatus("手臂", 9.5, 8, 14, 18, "x"))
+            )
+        )
+        assertTrue(briefing.lines.any { it.contains("手臂 9.5 组") })
     }
 
     /** 和路线书里的示例同构：本周 3 练、环比 +8%、背到位、胸欠练、上次睡眠不足。 */
@@ -160,6 +172,30 @@ class CoachNarratorTest {
             )
         )
         assertTrue(briefing.lines.last().contains("降重量、缩小行程"))
+    }
+
+    /** 多次状态不佳备注 → 趋势补充；最近的备注仍决定主建议。 */
+    @Test
+    fun repeatedBadStateNotesAddTrendHint() {
+        val briefing = CoachNarrator.brief(
+            CoachInput(
+                sessionCount = 3,
+                recentNotes = listOf("累", "睡眠不足", "状态好")
+            )
+        )
+        val note = briefing.lines.first { it.contains("备注") }
+        assertTrue("要点出最近 3 次里有 2 次状态不佳：$note", note.contains("2 次"))
+        assertTrue("最新的一条（累）决定主建议", note.contains("累"))
+    }
+
+    /** 只有一条备注时不硬凑趋势。 */
+    @Test
+    fun singleNoteHasNoTrendHint() {
+        val briefing = CoachNarrator.brief(
+            CoachInput(sessionCount = 2, recentNotes = listOf("睡眠不足"))
+        )
+        val note = briefing.lines.first { it.contains("备注") }
+        assertTrue(!note.contains("最近 1 次"))
     }
 
     @Test

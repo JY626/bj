@@ -67,19 +67,37 @@ object PeriodReviewCalculator {
         sets.filter { it.isCompleted }.map { it.sessionId }.toSet()
 
     /**
-     * 部位 → 有效组数。排除热身组，以及不在 [TRACKED_MUSCLES] 内的部位（如「核心」）。
+     * 部位 → 有效组数。排除热身组，以及不在 [TRACKED_MUSCLES] 内的部位。
      * 周期回顾与本周/上周部位对比共用这一份口径。
+     *
+     * **一个动作会同时计入多个肌群**：主肌群 [DIRECT_SET_WEIGHT] 组，每个间接肌群
+     * [INDIRECT_SET_WEIGHT] 组（如高位下拉 = 背部 +1 + 手臂 +0.5）。间接组不能计满，
+     * 否则一个拉日就能把手臂虚报到 MRV → 天天假警报「过度训练风险」。
      */
     fun muscleSetCounts(
         sets: List<WorkoutSetEntity>,
         exercises: List<ExerciseEntity>
-    ): Map<String, Int> {
+    ): Map<String, Double> {
         val exerciseById = exercises.associateBy { it.id }
-        val counts = mutableMapOf<String, Int>()
+        val counts = mutableMapOf<String, Double>()
         for (set in effectiveSets(sets)) {
-            val muscle = exerciseById[set.exerciseId]?.targetMuscle ?: continue
-            if (muscle !in TRACKED_MUSCLES) continue
-            counts[muscle] = (counts[muscle] ?: 0) + 1
+            val exercise = exerciseById[set.exerciseId] ?: continue
+            // 同一部位可能既是主肌群又被列为间接（如史密斯推肩：主肩部 + 间接“三角肌前束”也归肩部）。
+            // 此时必须取**较大权重(1.0)**，不能相加，更不能被 0.5 覆盖 ——
+            // 曾经用 buildMap+put，后者把主肌群的 1.0 覆盖成了 0.5，
+            // 11 个种子动作里有 9 个受影响，所有主肌群组数被系统性低估一半。
+            val contributions = buildMap<String, Double> {
+                put(exercise.targetMuscle, DIRECT_SET_WEIGHT)
+                for (part in exercise.secondaryMuscles.split(',')) {
+                    secondaryMuscleGroup(part)?.let { muscle ->
+                        put(muscle, maxOf(get(muscle) ?: 0.0, INDIRECT_SET_WEIGHT))
+                    }
+                }
+            }
+            for ((muscle, weight) in contributions) {
+                if (muscle !in TRACKED_MUSCLES) continue
+                counts[muscle] = (counts[muscle] ?: 0.0) + weight
+            }
         }
         return counts
     }
@@ -209,5 +227,34 @@ object PeriodReviewCalculator {
         }
     }
 
-    val TRACKED_MUSCLES = listOf("胸部", "背部", "腿部", "肩部", "手臂")
+    /** 主肌群每组折算的组数。 */
+    const val DIRECT_SET_WEIGHT = 1.0
+    /** 间接肌群每组折算的组数（行业惯例：间接容量按半组计）。 */
+    const val INDIRECT_SET_WEIGHT = 0.5
+
+    /** 参与部位容量统计的 6 个大类。 */
+    val TRACKED_MUSCLES = listOf("胸部", "背部", "腿部", "肩部", "手臂", "核心")
+
+    /**
+     * `secondaryMuscles` 里存的是细分名（肱三头肌 / 三角肌前束…），与 [TRACKED_MUSCLES]
+     * 是两套分类法。这张表就是两套分类法的唯一桥接点，按显式后缀匹配，
+     * **顺序不能动**（“前束/中束/后束”必须先于“束”这条兜底规则判断）。
+     */
+    private val SECONDARY_MUSCLE_GROUPS: List<Pair<List<String>, String>> = listOf(
+        listOf("三头", "肱三") to "手臂",
+        listOf("二头", "肱二") to "手臂",
+        listOf("三角肌") to "肩部",
+        listOf("肩袖", "冈上", "冈下") to "肩部",
+        listOf("胸") to "胸部",
+        listOf("背", "斜方", "菱形", "大圆", "小圆", "竖脊") to "背部",
+        listOf("臀", "腘绳", "股四", "股二", "小腿", "腿") to "腿部",
+        listOf("腹", "核心") to "核心"
+    )
+
+    /** 细分肌群名 → 追踪大类；不认识或空串返回 null（如“全身”）。 */
+    fun secondaryMuscleGroup(raw: String): String? {
+        val name = raw.trim()
+        if (name.isBlank()) return null
+        return SECONDARY_MUSCLE_GROUPS.firstOrNull { (keys, _) -> keys.any { name.contains(it) } }?.second
+    }
 }

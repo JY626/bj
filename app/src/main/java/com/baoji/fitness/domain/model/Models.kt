@@ -36,12 +36,17 @@ data class ExerciseWithSets(
 
 data class MuscleVolumeStatus(
     val muscleGroup: String,
-    val completedSets: Int,
+    /** 有效组数，可为小数：主肌群 1.0 / 间接肌群 0.5（高位下拉既算背部也算手臂）。 */
+    val completedSets: Double,
     val mev: Int, // Minimum Effective Volume
     val mav: Int, // Maximum Adaptive Volume
     val mrv: Int, // Maximum Recoverable Volume
     val statusText: String
 )
+
+/** 「1.5 组」这种小数要能读出来，而不是显示成 1.5 / 2.0 混搭。 */
+fun formatSets(value: Double): String =
+    if (value % 1.0 == 0.0) value.toInt().toString() else String.format(java.util.Locale.US, "%.1f", value)
 
 /** 某一天的训练明细：仅统计完成组，按动作分组。 */
 data class WorkoutDayDetail(

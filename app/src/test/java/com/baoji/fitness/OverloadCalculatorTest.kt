@@ -55,13 +55,21 @@ class OverloadCalculatorTest {
     @Test
     fun testRpVolumeLandmarks() {
         // Chest MEV is 10, MAV is 16
-        val lowStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 6)
+        val lowStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 6.0)
         assertTrue(lowStatus.statusText.contains("欠练"))
 
-        val optimalStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 14)
+        val optimalStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 14.0)
         assertTrue(optimalStatus.statusText.contains("MAV"))
 
-        val excessiveStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 25)
+        val excessiveStatus = OverloadCalculator.evaluateMuscleVolume("胸部", 25.0)
         assertTrue(excessiveStatus.statusText.contains("过度训练"))
+    }
+
+    /** 小数组数（主 1.0 + 间接 0.5）必须走区间，不能被 IntRange 判成「过度训练」。 */
+    @Test
+    fun fractionalSetsFallInTheRightBands() {
+        assertTrue(OverloadCalculator.evaluateMuscleVolume("胸部", 9.5).statusText.contains("欠练"))
+        assertTrue(OverloadCalculator.evaluateMuscleVolume("胸部", 9.5 + 0.5).statusText.contains("MAV"))
+        assertTrue(OverloadCalculator.evaluateMuscleVolume("胸部", 16.5).statusText.contains("疲劳"))
     }
 }

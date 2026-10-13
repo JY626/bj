@@ -21,6 +21,7 @@ import com.baoji.fitness.domain.model.workoutTypeLabel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -33,6 +34,8 @@ class WorkoutRepository(
     private val exerciseDao: ExerciseDao
 ) {
     fun getActiveSession(): Flow<WorkoutSessionEntity?> = workoutDao.getActiveSession()
+
+    suspend fun getActiveSessions(): List<WorkoutSessionEntity> = workoutDao.getActiveSessions()
 
     /** 训练打卡：当天至少完成过一组训练的自然日 → 训练类型（推/拉/腿）。同天多场取最新。 */
     fun getTrainedDayTypes(): Flow<Map<LocalDate, String>> = combine(
@@ -72,6 +75,12 @@ class WorkoutRepository(
 
     suspend fun insertExercise(exercise: ExerciseEntity): Long = exerciseDao.insertExercise(exercise)
 
+    /** 新建自定义动作前查重：同名（去空格）已存在就不要再插一条。 */
+    suspend fun findExerciseByName(name: String): ExerciseEntity? =
+        exerciseDao.getAllExercises().first().firstOrNull {
+            it.name.trim().equals(name.trim(), ignoreCase = true)
+        }
+
     suspend fun startNewSession(title: String = "自由推力训练"): Long {
         workoutDao.closeAllActiveSessions()
         val session = WorkoutSessionEntity(
@@ -92,6 +101,30 @@ class WorkoutRepository(
         workoutDao.updateSession(updated)
     }
 
+    /**
+     * 跨天归档：把指定会话置为已完成，**容量按实际完成组重算**
+     * （不能写 0 —— 昨晚真的练了，数据不能丢），endTime 取最后一组的完成时刻。
+     */
+    suspend fun archiveSessions(sessionIds: List<Long>) {
+        for (id in sessionIds) {
+            val session = workoutDao.getSessionById(id).first() ?: continue
+            val sets = workoutDao.getSetsForSession(id).first()
+            val effective = sets.filter { it.isCompleted && it.setType != "WARMUP" }
+            val volume = effective.sumOf { it.weightKg * it.reps }
+            val lastAt = sets.filter { it.isCompleted }.mapNotNull { it.completedAt }.maxOrNull()
+            workoutDao.updateSession(
+                session.copy(
+                    status = "COMPLETED",
+                    totalVolumeKg = volume,
+                    endTime = lastAt ?: session.startTime
+                )
+            )
+        }
+    }
+
+    suspend fun getSessionById(id: Long): WorkoutSessionEntity? =
+        workoutDao.getSessionById(id).first()
+
     /** M3a：会话备注（`notes` 列 v2 就存在，此前全项目零读写）。 */
     suspend fun updateSessionNotes(sessionId: Long, notes: String) =
         workoutDao.updateSessionNotes(sessionId, notes)
@@ -105,6 +138,9 @@ class WorkoutRepository(
 
     /** 最近 [limit] 条非空备注，供 M4a 本地总结与训练页文案使用。 */
     fun getRecentNotes(limit: Int = 3): Flow<List<String>> = workoutDao.getRecentNotes(limit)
+
+    /** 分析器需要全量完成组（与 `trainingHistory` 同一查询）。 */
+    fun getAllCompletedSets(): Flow<List<WorkoutSetEntity>> = workoutDao.getCompletedSetsSince(0L)
 
     fun getSetsForSession(sessionId: Long): Flow<List<WorkoutSetEntity>> =
         workoutDao.getSetsForSession(sessionId)
@@ -257,7 +293,7 @@ class WorkoutRepository(
         val lastWeek = DateWindow(thisWeek.from.minusWeeks(1), thisWeek.from)
 
         return trainingHistory.map { (sessions, sets, exercises) ->
-            fun counts(window: DateWindow): Map<String, Int> =
+            fun counts(window: DateWindow): Map<String, Double> =
                 PeriodReviewCalculator.muscleSetCounts(
                     PeriodReviewCalculator.setsOf(
                         sets,
@@ -269,10 +305,10 @@ class WorkoutRepository(
             val prev = counts(lastWeek)
             WeeklyMuscleComparison(
                 current = PeriodReviewCalculator.TRACKED_MUSCLES.map {
-                    OverloadCalculator.evaluateMuscleVolume(it, cur[it] ?: 0)
+                    OverloadCalculator.evaluateMuscleVolume(it, cur[it] ?: 0.0)
                 },
                 previous = PeriodReviewCalculator.TRACKED_MUSCLES.map {
-                    OverloadCalculator.evaluateMuscleVolume(it, prev[it] ?: 0)
+                    OverloadCalculator.evaluateMuscleVolume(it, prev[it] ?: 0.0)
                 }
             )
         }

@@ -10,7 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
@@ -20,6 +22,7 @@ import com.baoji.fitness.core.theme.BaojiTheme
 import com.baoji.fitness.ui.analytics.AnalyticsViewModel
 import com.baoji.fitness.ui.calendar.CalendarViewModel
 import com.baoji.fitness.ui.coach.CoachViewModel
+import com.baoji.fitness.ui.library.LibraryViewModel
 import com.baoji.fitness.ui.navigation.MainScreen
 import com.baoji.fitness.ui.workout.WorkoutViewModel
 
@@ -56,7 +59,9 @@ class MainActivity : ComponentActivity() {
                 return CoachViewModel(
                     repository = app.workoutRepository,
                     bodyMetricRepository = app.bodyMetricRepository,
-                    reminderSettings = app.reminderSettings
+                    reminderSettings = app.reminderSettings,
+                    coachReportRepository = app.coachReportRepository,
+                    llmSettings = app.llmSettings
                 ) as T
             }
         }
@@ -70,7 +75,21 @@ class MainActivity : ComponentActivity() {
                 return CalendarViewModel(
                     repository = app.workoutRepository,
                     bodyMetricRepository = app.bodyMetricRepository,
-                    reminderSettings = app.reminderSettings
+                    reminderSettings = app.reminderSettings,
+                    coachReportRepository = app.coachReportRepository
+                ) as T
+            }
+        }
+    }
+
+    private val libraryViewModel: LibraryViewModel by viewModels {
+        val app = application as BaojiApplication
+        object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return LibraryViewModel(
+                    repository = app.workoutRepository,
+                    llmSettings = app.llmSettings
                 ) as T
             }
         }
@@ -84,6 +103,17 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BaojiTheme {
+                // App 常在后台活过午夜：回到前台时检查是否已跨天（推进"今天"并归档旧会话）
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            workoutViewModel.rollOverIfNewDay()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
                 // 只在用户真的打开提醒开关时才申请通知权限（不在启动时打扰）
                 val wantsPermission by calendarViewModel.permissionRequest.collectAsState()
                 val launcher = rememberLauncherForActivityResult(
@@ -110,6 +140,7 @@ class MainActivity : ComponentActivity() {
                     analyticsViewModel = analyticsViewModel,
                     calendarViewModel = calendarViewModel,
                     coachViewModel = coachViewModel,
+                    libraryViewModel = libraryViewModel,
                     repository = app.workoutRepository,
                     bodyMetricRepository = app.bodyMetricRepository
                 )

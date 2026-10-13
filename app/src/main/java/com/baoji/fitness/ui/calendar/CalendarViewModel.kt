@@ -3,7 +3,9 @@ package com.baoji.fitness.ui.calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
+import com.baoji.fitness.core.database.entity.CoachReportEntity
 import com.baoji.fitness.data.repository.BodyMetricRepository
+import com.baoji.fitness.data.repository.CoachReportRepository
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.data.settings.ReminderConfig
 import com.baoji.fitness.data.settings.ReminderSettings
@@ -32,7 +34,8 @@ data class HabitSummary(
 class CalendarViewModel(
     private val repository: WorkoutRepository,
     private val bodyMetricRepository: BodyMetricRepository,
-    private val reminderSettings: ReminderSettings
+    private val reminderSettings: ReminderSettings,
+    private val coachReportRepository: CoachReportRepository
 ) : ViewModel() {
 
     /** 已打卡的训练日 → 训练类型（推/拉/腿），供月历显示。 */
@@ -88,6 +91,9 @@ class CalendarViewModel(
     /** M4b 隐私开关：控制是否允许把训练摘要发给大模型。 */
     fun setLlmSharing(enabled: Boolean) = reminderSettings.setLlmSharing(enabled)
 
+    /** 组间休息时长（打勾后自动倒计时）。 */
+    fun setRestSeconds(seconds: Int) = reminderSettings.setRestSeconds(seconds)
+
     // ---- 日历明细 ------------------------------------------------------------
 
     private val _selectedDay = MutableStateFlow<LocalDate?>(null)
@@ -111,16 +117,32 @@ class CalendarViewModel(
         day: LocalDate,
         weightKg: Double?,
         bodyFatPct: Double?,
+        heightCm: Double?,
         chestCm: Double?,
         waistCm: Double?,
         armCm: Double?
     ) {
         viewModelScope.launch {
-            bodyMetricRepository.upsert(day, weightKg, bodyFatPct, chestCm, waistCm, armCm)
+            bodyMetricRepository.upsert(day, weightKg, bodyFatPct, heightCm, chestCm, waistCm, armCm)
         }
     }
 
     fun selectDay(day: LocalDate?) {
         _selectedDay.value = day
     }
+
+    // ---- 保存的私教分析 ----------------------------------------------------
+
+    private val _selectedDayReports = MutableStateFlow<List<CoachReportEntity>>(emptyList())
+
+    /** 选中那天保存的分析报告（今日/本周，可能都有）。 */
+    val dayReports: StateFlow<List<CoachReportEntity>> = _selectedDay
+        .flatMapLatest { day ->
+            if (day == null) flowOf(emptyList()) else coachReportRepository.observeForDate(day)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 有分析报告的日子 → 日历上打小点。 */
+    val reportDays: StateFlow<Set<LocalDate>> = coachReportRepository.observeReportDays()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 }

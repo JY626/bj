@@ -7,9 +7,11 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.baoji.fitness.core.database.dao.BodyMetricDao
+import com.baoji.fitness.core.database.dao.CoachReportDao
 import com.baoji.fitness.core.database.dao.ExerciseDao
 import com.baoji.fitness.core.database.dao.WorkoutDao
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
+import com.baoji.fitness.core.database.entity.CoachReportEntity
 import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
@@ -22,9 +24,10 @@ import kotlinx.coroutines.launch
         ExerciseEntity::class,
         WorkoutSessionEntity::class,
         WorkoutSetEntity::class,
-        BodyMetricEntity::class
+        BodyMetricEntity::class,
+        CoachReportEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = true
 )
 abstract class BaojiDatabase : RoomDatabase() {
@@ -33,6 +36,9 @@ abstract class BaojiDatabase : RoomDatabase() {
 
     /** M3b：身体数据。 */
     abstract fun bodyMetricDao(): BodyMetricDao
+
+    /** 保存下来的私教分析报告（日历可回看）。 */
+    abstract fun coachReportDao(): CoachReportDao
 
     companion object {
         @Volatile
@@ -66,8 +72,39 @@ abstract class BaojiDatabase : RoomDatabase() {
             }
         }
 
-        fun getDatabase(context: Context, scope: CoroutineScope): BaojiDatabase {
-            return INSTANCE ?: synchronized(this) {
+        /**
+         * v3 → v4：身体数据加身高列（算 BMI）。旧行 heightCm 为 NULL（未测），
+         * 语义正确：老记录本就不知道身高。
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `body_metrics` ADD COLUMN `heightCm` REAL")
+            }
+        }
+
+        /**
+         * v4 → v5：新增 `coach_reports` 表（保存的私教分析）。
+         * SQL 必须与 `app/schemas/.../5.json` 逐字一致。
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `coach_reports` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`date` INTEGER NOT NULL, " +
+                        "`scope` TEXT NOT NULL, " +
+                        "`content` TEXT NOT NULL, " +
+                        "`source` TEXT NOT NULL, " +
+                        "`generatedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_coach_reports_date_scope` " +
+                        "ON `coach_reports` (`date`, `scope`)"
+                )
+            }
+        }
+
+        fun getDatabase(context: Context, scope: CoroutineScope): BaojiDatabase {            return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     BaojiDatabase::class.java,
@@ -76,7 +113,7 @@ abstract class BaojiDatabase : RoomDatabase() {
                     .addCallback(DatabaseCallback(scope))
                     // v3 起口径改变：M1 之后会积累真实训练史，M3b/M2 都要动 schema，
                     // 再清一次库等于把路线图目标全抹掉。所有版本升级一律走显式迁移。
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance

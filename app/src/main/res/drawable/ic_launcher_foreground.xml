@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  薄肌 (Baoji) 图标前景：渐进上升条。
+
+  概念 = 渐进式超负荷：三根自左向右递增的竖条。直接对应 App 的核心功能，
+  且小到 48px 仍可辨认（已在 48px / 圆形裁切下实测）。
+
+  几何说明（108dp 画布）：
+  - 自适应图标会被裁成圆形/方形/squircle，**圆形裁切半径约 36dp**，
+    所以内容必须落在以 (54,54) 为心、半径 ~33dp 的圆内，否则外圈竖条会被切掉。
+  - 条宽 12、间距 8 → 总宽 3*12 + 2*8 = 52，水平居中（x: 28 / 48 / 68）。
+  - 底边统一 y=78，高度 16 / 30 / 46。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左：起点 -->
+    <path
+        android:fillColor="#30D158"
+        android:pathData="M30,62 L38,62 A2,2 0 0 1 40,64 L40,76 A2,2 0 0 1 38,78 L30,78 A2,2 0 0 1 28,76 L28,64 A2,2 0 0 1 30,62 Z" />
+    <!-- 中：进阶 -->
+    <path
+        android:fillColor="#30D158"
+        android:pathData="M50,48 L58,48 A2,2 0 0 1 60,50 L60,76 A2,2 0 0 1 58,78 L50,78 A2,2 0 0 1 48,76 L48,50 A2,2 0 0 1 50,48 Z" />
+    <!-- 右：突破 -->
+    <path
+        android:fillColor="#30D158"
+        android:pathData="M70,32 L78,32 A2,2 0 0 1 80,34 L80,76 A2,2 0 0 1 78,78 L70,78 A2,2 0 0 1 68,76 L68,34 A2,2 0 0 1 70,32 Z" />
+</vector>

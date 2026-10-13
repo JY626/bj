@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  单色版（Android 13+ 主题化图标）：系统套用自己的配色，
+  所以只能是一条纯白实心路径（不能带颜色），几何与彩色版完全一致：
+  三条底边对齐、自左向右递增的圆角竖条。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,62 L38,62 A2,2 0 0 1 40,64 L40,76 A2,2 0 0 1 38,78 L30,78 A2,2 0 0 1 28,76 L28,64 A2,2 0 0 1 30,62 Z
+                          M50,48 L58,48 A2,2 0 0 1 60,50 L60,76 A2,2 0 0 1 58,78 L50,78 A2,2 0 0 1 48,76 L48,50 A2,2 0 0 1 50,48 Z
+                          M70,32 L78,32 A2,2 0 0 1 80,34 L80,76 A2,2 0 0 1 78,78 L70,78 A2,2 0 0 1 68,76 L68,34 A2,2 0 0 1 70,32 Z" />
+</vector>

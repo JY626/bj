@@ -53,14 +53,20 @@ import com.baoji.fitness.core.theme.AppleHairline
 import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
-import com.baoji.fitness.data.repository.BodyMetricRepository
+import com.baoji.fitness.core.theme.AppleSystemRed
 import com.baoji.fitness.data.repository.WorkoutRepository
+import com.baoji.fitness.domain.algorithm.MuscleClassifier
 import com.baoji.fitness.ui.components.ChartPoint
-import com.baoji.fitness.ui.components.MinimalLineChart
-import kotlinx.coroutines.launch
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** 数值 → 文本：整数不显示小数点，其余保留一位。 */
 internal fun formatMetric(value: Double): String =
@@ -69,16 +75,13 @@ internal fun formatMetric(value: Double): String =
 @Composable
 fun LibraryScreen(
     repository: WorkoutRepository,
-    bodyMetricRepository: BodyMetricRepository,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    createExercise: suspend (String) -> String? = { null }
 ) {
     val exercises by repository.getAllExercises().collectAsState(initial = emptyList())
-    val latestMetric by bodyMetricRepository.observeLatest().collectAsState(initial = null)
-    val allMetrics by bodyMetricRepository.observeAll().collectAsState(initial = emptyList())
 
     var selectedMuscle by remember { mutableStateOf("全部") }
-    var showMetricSheet by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var showCreateSheet by remember { mutableStateOf(false) }
 
     val filtered = if (selectedMuscle == "全部") {
         exercises
@@ -93,30 +96,62 @@ fun LibraryScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Header
+        // 1. Header —— 右上角「新建动作」
         item {
             Spacer(modifier = Modifier.height(12.dp))
-            Column {
-                Text(
-                    text = "EXERCISE ENCYCLOPEDIA",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppleTextSecondary,
-                    letterSpacing = 0.5.sp
-                )
-                Text(
-                    text = "动作库与档案",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppleTextPrimary,
-                    letterSpacing = (-0.5).sp
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "EXERCISE LIBRARY",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextSecondary,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "动作库",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleTextPrimary,
+                        letterSpacing = (-0.5).sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(AppleGray6)
+                        .border(1.dp, AppleHairline, RoundedCornerShape(14.dp))
+                        .clickable { showCreateSheet = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "新建动作",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleFitnessGreen
+                        )
+                    }
+                }
             }
         }
 
         // 2. Muscle Filter
         item {
-            val muscles = listOf("全部", "胸部", "背部", "腿部", "肩部", "手臂")
+            val muscles = listOf("全部") + MuscleClassifier.PRIMARY_MUSCLES
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -152,6 +187,14 @@ fun LibraryScreen(
                     .background(AppleGray6)
                     .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
             ) {
+                if (filtered.isEmpty()) {
+                    Text(
+                        text = "这个部位还没有动作，点右上角「新建动作」添加",
+                        fontSize = 12.sp,
+                        color = AppleTextTertiary,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
                 filtered.forEachIndexed { index, exercise ->
                     ExerciseListItem(exercise = exercise)
                     if (index < filtered.size - 1) {
@@ -161,239 +204,19 @@ fun LibraryScreen(
             }
         }
 
-        // 4. Body Metrics Card —— M3b：改读真实记录（此前是写死的 73.5 / 15.2）
-        item {
-            BodyMetricsCard(
-                latest = latestMetric,
-                history = allMetrics,
-                onRecord = { showMetricSheet = true }
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(80.dp))
-        }
+        item { Spacer(modifier = Modifier.height(80.dp)) }
     }
 
-    if (showMetricSheet) {
-        BodyMetricSheet(
-            day = LocalDate.now(),
-            latest = latestMetric,
-            onDismiss = { showMetricSheet = false },
-            onSave = { weight, fat, chest, waist, arm ->
-                scope.launch {
-                    bodyMetricRepository.upsert(
-                        day = LocalDate.now(),
-                        weightKg = weight,
-                        bodyFatPct = fat,
-                        chestCm = chest,
-                        waistCm = waist,
-                        armCm = arm
-                    )
-                }
-                showMetricSheet = false
-            }
+    if (showCreateSheet) {
+        CreateExerciseSheet(
+            /** 由 ViewModel 负责：先试 LLM 归类，失败回落关键词。返回创建好的动作名或 null。 */
+            onCreate = createExercise,
+            onDismiss = { showCreateSheet = false }
         )
     }
 }
 
-@Composable
-private fun BodyMetricsCard(
-    latest: BodyMetricEntity?,
-    history: List<BodyMetricEntity>,
-    onRecord: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(AppleGray6)
-            .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "生理参数与健康上下文",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppleTextPrimary
-                )
-                Text(
-                    text = latest?.let {
-                        "最近记录 " + millisToDay(it.date)
-                            .format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINESE))
-                    } ?: "还没有记录",
-                    fontSize = 11.sp,
-                    color = AppleTextSecondary
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppleGray5)
-                    .clickable { onRecord() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = LucideIcons.Plus,
-                        contentDescription = null,
-                        tint = AppleFitnessGreen,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = if (latest == null) "记一次" else "记录",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppleFitnessGreen
-                    )
-                }
-            }
-        }
 
-        if (latest == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(AppleGray5)
-                    .clickable { onRecord() }
-                    .padding(vertical = 20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "还没有记录，点这里记一次",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppleFitnessGreen
-                    )
-                    Text(
-                        text = "体重 / 体脂 / 围度 · 一天一条",
-                        fontSize = 10.sp,
-                        color = AppleTextTertiary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                BioCard(
-                    "体重",
-                    latest.weightKg?.let { formatMetric(it) } ?: "--",
-                    "kg",
-                    Modifier.weight(1f)
-                )
-                BioCard(
-                    "体脂率",
-                    latest.bodyFatPct?.let { formatMetric(it) } ?: "--",
-                    "%",
-                    Modifier.weight(1f)
-                )
-                BioCard(
-                    "腰围",
-                    latest.waistCm?.let { formatMetric(it) } ?: "--",
-                    "cm",
-                    Modifier.weight(1f)
-                )
-            }
-
-            // 围度补充行（只有录过才显示）
-            val extra = listOfNotNull(
-                latest.chestCm?.let { "胸围 ${formatMetric(it)} cm" },
-                latest.armCm?.let { "臂围 ${formatMetric(it)} cm" }
-            )
-            if (extra.isNotEmpty()) {
-                Text(
-                    text = extra.joinToString(" · "),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = AppleTextSecondary
-                )
-            }
-        }
-
-        // 趋势图：至少两次记录才有意义
-        val weightPoints = history.mapNotNull { m ->
-            m.weightKg?.let { ChartPoint(toShortDate(m.date), it) }
-        }
-        val waistPoints = history.mapNotNull { m ->
-            m.waistCm?.let { ChartPoint(toShortDate(m.date), it) }
-        }
-
-        if (weightPoints.size >= 2) {
-            MetricTrend(
-                title = "体重趋势",
-                unit = "kg",
-                points = weightPoints,
-                zeroBased = false
-            )
-        }
-        if (waistPoints.size >= 2) {
-            MetricTrend(
-                title = "腰围趋势",
-                unit = "cm",
-                points = waistPoints,
-                zeroBased = false
-            )
-        }
-    }
-}
-
-@Composable
-private fun MetricTrend(
-    title: String,
-    unit: String,
-    points: List<ChartPoint>,
-    zeroBased: Boolean
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = title, fontSize = 12.sp, color = AppleTextSecondary)
-            Text(
-                text = "${formatMetric(points.last().value)} $unit",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = FontFamily.Monospace,
-                color = AppleFitnessGreen
-            )
-        }
-        MinimalLineChart(
-            points = points,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp),
-            zeroBased = zeroBased,
-            showXLabels = true
-        )
-    }
-}
-
-/** date 是当天本地 0 点 millis，直接换算回日期做短标签。 */
-private fun toShortDate(dateMillis: Long): String {
-    val day = millisToDay(dateMillis)
-    return "${day.monthValue}/${day.dayOfMonth}"
-}
-
-private fun millisToDay(dateMillis: Long): LocalDate =
-    java.time.Instant.ofEpochMilli(dateMillis)
-        .atZone(java.time.ZoneId.systemDefault())
-        .toLocalDate()
 
 @Composable
 private fun ExerciseListItem(exercise: ExerciseEntity) {
@@ -432,57 +255,25 @@ private fun ExerciseListItem(exercise: ExerciseEntity) {
     }
 }
 
-@Composable
-private fun BioCard(
-    label: String,
-    value: String,
-    unit: String?,
-    modifier: Modifier = Modifier,
-    valueColor: Color = AppleTextPrimary
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppleGray5)
-            .padding(vertical = 10.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = label, fontSize = 10.sp, color = AppleTextSecondary)
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
-            Text(
-                text = value,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = valueColor
-            )
-            unit?.let {
-                Text(
-                    text = " $it",
-                    fontSize = 10.sp,
-                    color = AppleTextSecondary
-                )
-            }
-        }
-    }
-}
 
 /**
  * M3b 录入弹层。预填最新一条记录（无记录时给中性基准），
  * 用步进 pills 调整 —— 健身房里单手可操作的交互。
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BodyMetricSheet(
     day: LocalDate,
     latest: BodyMetricEntity?,
     onDismiss: () -> Unit,
-    onSave: (Double?, Double?, Double?, Double?, Double?) -> Unit
+    onSave: (Double?, Double?, Double?, Double?, Double?, Double?) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
 
     var weight by remember { mutableStateOf(latest?.weightKg ?: 75.0) }
     var fat by remember { mutableStateOf(latest?.bodyFatPct ?: 18.0) }
+    var height by remember { mutableStateOf(latest?.heightCm ?: 175.0) }
     var chest by remember { mutableStateOf(latest?.chestCm ?: 100.0) }
     var waist by remember { mutableStateOf(latest?.waistCm ?: 80.0) }
     var arm by remember { mutableStateOf(latest?.armCm ?: 35.0) }
@@ -549,6 +340,16 @@ internal fun BodyMetricSheet(
                 }
             )
             MetricStepper(
+                label = "身高",
+                unit = "cm",
+                value = height,
+                deltas = listOf(-1.0, -0.5, 0.5, 1.0),
+                onDelta = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    height = step(height, it)
+                }
+            )
+            MetricStepper(
                 label = "胸围",
                 unit = "cm",
                 value = chest,
@@ -586,7 +387,7 @@ internal fun BodyMetricSheet(
                     .background(AppleFitnessGreen)
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSave(weight, fat, chest, waist, arm)
+                        onSave(weight, fat, height, chest, waist, arm)
                     }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
@@ -653,6 +454,108 @@ private fun MetricStepper(
                         color = AppleTextPrimary
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 新建自定义动作。**只输名字**，主肌群/器械由 LLM 判定（失败回落关键词），
+ * 创建后立即出现在动作库与训练页的「添加动作」里。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateExerciseSheet(
+    onCreate: suspend (String) -> String?,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+
+    ModalBottomSheet(
+        onDismissRequest = { if (!busy) onDismiss() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = AppleGray6
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Column {
+                Text(
+                    text = "新建动作",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppleTextPrimary
+                )
+                Text(
+                    text = "只填名字，练到的部位和器械由私教自动识别（会把组数算进对应部位）",
+                    fontSize = 11.sp,
+                    color = AppleTextSecondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(text = "动作名称", fontSize = 11.sp, color = AppleTextSecondary)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppleGray5)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    if (name.isEmpty()) {
+                        Text(
+                            text = "如：坐姿划船 / 保加利亚分腿蹲",
+                            fontSize = 13.sp,
+                            color = AppleTextTertiary
+                        )
+                    }
+                    BasicTextField(
+                        value = name,
+                        onValueChange = { name = it; error = null },
+                        textStyle = TextStyle(fontSize = 13.sp, color = AppleTextPrimary),
+                        cursorBrush = SolidColor(AppleFitnessGreen),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            error?.let {
+                Text(text = it, fontSize = 11.sp, color = AppleSystemRed)
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (name.isNotBlank() && !busy) AppleFitnessGreen else AppleGray4)
+                    .clickable(enabled = name.isNotBlank() && !busy) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        scope.launch {
+                            busy = true
+                            val err = onCreate(name.trim())
+                            busy = false
+                            if (err == null) onDismiss() else error = err
+                        }
+                    }
+                    .padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (busy) "识别中…" else "创建",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (name.isNotBlank() && !busy) Color.Black else AppleTextSecondary
+                )
             }
         }
     }

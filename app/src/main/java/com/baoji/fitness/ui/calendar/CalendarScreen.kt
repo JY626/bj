@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
+import com.baoji.fitness.core.database.entity.CoachReportEntity
 import com.baoji.fitness.core.theme.AppleBlack
 import com.baoji.fitness.core.theme.AppleCautionOrange
 import com.baoji.fitness.core.theme.AppleFitnessGreen
@@ -49,6 +50,7 @@ import com.baoji.fitness.core.theme.AppleTextPrimary
 import com.baoji.fitness.core.theme.AppleTextSecondary
 import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.data.settings.ReminderConfig
+import com.baoji.fitness.domain.algorithm.CoachReport
 import com.baoji.fitness.domain.model.WorkoutDayDetail
 import com.baoji.fitness.ui.components.ExerciseGroupCard
 import com.baoji.fitness.ui.library.BodyMetricSheet
@@ -68,6 +70,7 @@ fun CalendarScreen(
     val selectedDay by viewModel.selectedDay.collectAsState()
     val dayDetail by viewModel.dayDetail.collectAsState()
     val dayMetric by viewModel.dayMetric.collectAsState()
+    val dayReports by viewModel.dayReports.collectAsState()
     val habit by viewModel.habit.collectAsState()
     val reminderConfig by viewModel.reminderConfig.collectAsState()
 
@@ -112,9 +115,15 @@ fun CalendarScreen(
         )
 
         Text(
-            text = "点绿色日期查看当天训练明细",
+            text = "点日期查看当天训练明细与已保存的分析报告",
             fontSize = 12.sp,
             color = AppleTextTertiary
+        )
+
+        // 训练设置：组间休息时长（打勾后自动开始）
+        RestDurationCard(
+            restSeconds = reminderConfig.restSeconds,
+            onChange = { viewModel.setRestSeconds(it) }
         )
 
         // M2：训练日提醒设置
@@ -140,6 +149,7 @@ fun CalendarScreen(
             day = selectedDay!!,
             detail = dayDetail,
             metric = dayMetric,
+            reports = dayReports,
             onRecordMetric = { showDayMetricSheet = true },
             onDismiss = { viewModel.selectDay(null) }
         )
@@ -151,8 +161,8 @@ fun CalendarScreen(
             day = selectedDay!!,
             latest = dayMetric,
             onDismiss = { showDayMetricSheet = false },
-            onSave = { weight, fat, chest, waist, arm ->
-                viewModel.saveMetric(selectedDay!!, weight, fat, chest, waist, arm)
+            onSave = { weight, fat, height, chest, waist, arm ->
+                viewModel.saveMetric(selectedDay!!, weight, fat, height, chest, waist, arm)
                 showDayMetricSheet = false
             }
         )
@@ -221,8 +231,7 @@ private fun ReminderSettingsCard(
     onToggleEnabled: (Boolean) -> Unit,
     onTimeChange: (Int, Int) -> Unit,
     onToggleDay: (DayOfWeek) -> Unit
-) {
-    Column(
+) {    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
@@ -290,6 +299,46 @@ private fun ReminderSettingsCard(
                         modifier = Modifier.weight(1f)
                     ) { onToggleDay(day) }
                 }
+            }
+        }
+    }
+}
+
+/** 组间休息时长：打勾后自动倒计时用的秒数。 */
+@Composable
+private fun RestDurationCard(restSeconds: Int, onChange: (Int) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(AppleGray6)
+            .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column {
+            Text(
+                text = "组间休息时长",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppleTextPrimary
+            )
+            Text(
+                text = "打勾后自动开始倒计时；大重量复合动作可调到 180s",
+                fontSize = 10.sp,
+                color = AppleTextTertiary
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(60 to "60s", 90 to "90s", 120 to "2min", 180 to "3min", 240 to "4min").forEach { (sec, label) ->
+                ChipBox(
+                    text = label,
+                    selected = restSeconds == sec,
+                    modifier = Modifier.weight(1f)
+                ) { onChange(sec) }
             }
         }
     }
@@ -536,6 +585,7 @@ private fun DayDetailSheet(
     day: LocalDate,
     detail: WorkoutDayDetail?,
     metric: BodyMetricEntity?,
+    reports: List<CoachReportEntity>,
     onRecordMetric: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -668,6 +718,56 @@ private fun DayDetailSheet(
                     fontFamily = FontFamily.Monospace,
                     color = if (metric == null) AppleTextTertiary else AppleTextPrimary
                 )
+            }
+
+            // 保存的私教分析（今日/本周，生成过才有）
+            reports.forEach { report ->
+                val scopeLabel = when (report.scope) {
+                    "TODAY" -> "今日分析"
+                    "THIS_WEEK" -> "本周分析"
+                    else -> report.scope
+                }
+                val scope = when (report.scope) {
+                    "TODAY" -> CoachReport.Scope.TODAY
+                    "LAST_4_WEEKS" -> CoachReport.Scope.LAST_4_WEEKS
+                    else -> CoachReport.Scope.THIS_WEEK
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(AppleGray5)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(scopeLabel, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppleTextPrimary)
+                        Text(
+                            text = if (report.source == "LLM") "云端" else "本地",
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = AppleTextTertiary
+                        )
+                    }
+                    CoachReport.splitSections(report.content, scope).forEach { section ->
+                        Text(
+                            text = section.title,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppleFitnessGreen,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                        Text(
+                            text = section.body,
+                            fontSize = 12.sp,
+                            color = AppleTextPrimary,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
             }
         }
     }

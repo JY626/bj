@@ -30,6 +30,7 @@ interface BodyMetricDao {
     @Query("SELECT * FROM body_metrics WHERE date = :date ORDER BY date DESC LIMIT 1")
     suspend fun getByDate(date: Long): BodyMetricEntity?
 
-    @Query("SELECT COUNT(*) FROM body_metrics")
-    suspend fun count(): Int
+    /** 最近一次填过的身高（身高很少变，写一次就沿用）。 */
+    @Query("SELECT heightCm FROM body_metrics WHERE heightCm IS NOT NULL ORDER BY date DESC LIMIT 1")
+    suspend fun getLatestHeight(): Double?
 }
