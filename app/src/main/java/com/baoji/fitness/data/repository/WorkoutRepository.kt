@@ -2,6 +2,7 @@ package com.baoji.fitness.data.repository
 
 import com.baoji.fitness.core.database.dao.ExerciseDao
 import com.baoji.fitness.core.database.dao.WorkoutDao
+import com.baoji.fitness.core.database.entity.BodyMetricEntity
 import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
@@ -31,7 +32,8 @@ import java.time.ZoneId
 
 class WorkoutRepository(
     private val workoutDao: WorkoutDao,
-    private val exerciseDao: ExerciseDao
+    private val exerciseDao: ExerciseDao,
+    private val onSessionArchived: (suspend (WorkoutSessionEntity, List<WorkoutSetEntity>, List<ExerciseEntity>) -> Unit)? = null
 ) {
     fun getActiveSession(): Flow<WorkoutSessionEntity?> = workoutDao.getActiveSession()
 
@@ -99,6 +101,11 @@ class WorkoutRepository(
             notes = notes
         )
         workoutDao.updateSession(updated)
+        onSessionArchived?.let { callback ->
+            val sets = workoutDao.getSetsForSession(session.id).first()
+            val exercises = exerciseDao.getAllExercises().first()
+            callback(updated, sets, exercises)
+        }
     }
 
     /**
@@ -112,13 +119,16 @@ class WorkoutRepository(
             val effective = sets.filter { it.isCompleted && it.setType != "WARMUP" }
             val volume = effective.sumOf { it.weightKg * it.reps }
             val lastAt = sets.filter { it.isCompleted }.mapNotNull { it.completedAt }.maxOrNull()
-            workoutDao.updateSession(
-                session.copy(
-                    status = "COMPLETED",
-                    totalVolumeKg = volume,
-                    endTime = lastAt ?: session.startTime
-                )
+            val updated = session.copy(
+                status = "COMPLETED",
+                totalVolumeKg = volume,
+                endTime = lastAt ?: session.startTime
             )
+            workoutDao.updateSession(updated)
+            onSessionArchived?.let { callback ->
+                val exercises = exerciseDao.getAllExercises().first()
+                callback(updated, sets, exercises)
+            }
         }
     }
 
@@ -313,6 +323,82 @@ class WorkoutRepository(
             )
         }
     }
+
+    /**
+     * 为「一键分享给 AI」打包上下文：
+     * 1. 当天训练明细
+     * 2. 上次同类型训练的有效容量（算环比）
+     * 3. 本周周期统计（训练次数、总容量、环比）
+     * 4. 本周各部位有效组数监控状态（胸/背/腿/肩/臂/核心）
+     * 5. 最新身体数据与上次变化
+     */
+    suspend fun getAiShareContext(
+        detail: WorkoutDayDetail,
+        metrics: List<BodyMetricEntity> = emptyList(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): AiShareContext {
+        val (sessions, sets, exercises) = trainingHistory.first()
+        val windows = PeriodReviewCalculator.resolveWindows(ReviewPeriod.THIS_WEEK, detail.date)
+
+        val currentWeekSessions = PeriodReviewCalculator.sessionsIn(sessions, windows.current, zone)
+        val prevWeekVolume = windows.previous?.let { prev ->
+            PeriodReviewCalculator.volumeOf(
+                PeriodReviewCalculator.setsOf(sets, PeriodReviewCalculator.sessionsIn(sessions, prev, zone))
+            )
+        }
+        val weekReview = PeriodReviewCalculator.buildPeriodReview(
+            label = ReviewPeriod.THIS_WEEK.label,
+            sets = PeriodReviewCalculator.setsOf(sets, currentWeekSessions),
+            sessions = currentWeekSessions,
+            previousVolumeKg = prevWeekVolume
+        )
+
+        // 本周部位组数
+        val currentWeekSets = PeriodReviewCalculator.setsOf(sets, currentWeekSessions)
+        val muscleCounts = PeriodReviewCalculator.muscleSetCounts(currentWeekSets, exercises)
+        val weeklyMuscles = PeriodReviewCalculator.TRACKED_MUSCLES.map {
+            OverloadCalculator.evaluateMuscleVolume(it, muscleCounts[it] ?: 0.0)
+        }
+
+        // 寻找上次同类型训练的有效容量
+        val typeKeyword = when {
+            detail.title.contains("推") -> "推"
+            detail.title.contains("拉") -> "拉"
+            detail.title.contains("腿") -> "腿"
+            else -> null
+        }
+        val previousSameTypeVolume = if (typeKeyword != null) {
+            val detailStartDay = detail.date
+            val pastSessions = sessions
+                .filter {
+                    val sessionDay = Instant.ofEpochMilli(it.startTime).atZone(zone).toLocalDate()
+                    sessionDay.isBefore(detailStartDay) && it.title.contains(typeKeyword)
+                }
+                .sortedByDescending { it.startTime }
+
+            val lastSameType = pastSessions.firstOrNull()
+            if (lastSameType != null) {
+                val sessionSets = PeriodReviewCalculator.setsOf(sets, listOf(lastSameType))
+                PeriodReviewCalculator.volumeOf(sessionSets)
+            } else null
+        } else null
+
+        // 身体数据：按日期倒序
+        val sortedMetrics = metrics.sortedByDescending { it.date }
+        val latest = sortedMetrics.firstOrNull()
+        val previous = sortedMetrics.drop(1).firstOrNull()
+
+        return AiShareContext(
+            detail = detail,
+            previousSameTypeVolume = previousSameTypeVolume,
+            weeklySessionCount = weekReview.sessionCount,
+            weeklyTotalVolumeKg = weekReview.totalVolumeKg,
+            weeklyVolumeDeltaPct = weekReview.volumeDeltaPct,
+            weeklyMuscles = weeklyMuscles,
+            latestMetric = latest,
+            previousMetric = previous
+        )
+    }
 }
 
 /** 部位容量进度条需要「本周 vs 上周」两条数，一一对应。 */
@@ -363,5 +449,57 @@ internal fun buildDayDetail(
             .sumOf { it.weightKg * it.reps },
         groups = groups,
         notes = session.notes
+    )
+}
+
+/** 一键分享给 AI 的完整上下文载荷。 */
+data class AiShareContext(
+    val detail: WorkoutDayDetail,
+    val previousSameTypeVolume: Double? = null,
+    val weeklySessionCount: Int? = null,
+    val weeklyTotalVolumeKg: Double? = null,
+    val weeklyVolumeDeltaPct: Double? = null,
+    val weeklyMuscles: List<MuscleVolumeStatus>? = null,
+    val latestMetric: BodyMetricEntity? = null,
+    val previousMetric: BodyMetricEntity? = null
+)
+
+/** 从当前正在进行的会话生成即时 WorkoutDayDetail，用于练完立即分享。 */
+fun buildActiveSessionDetail(
+    session: WorkoutSessionEntity,
+    sets: List<WorkoutSetEntity>,
+    exercises: List<ExerciseEntity>,
+    notes: String = session.notes
+): WorkoutDayDetail {
+    val exerciseById = exercises.associateBy { it.id }
+    val completed = sets.filter { it.isCompleted }
+    val groups = completed.groupBy { it.exerciseId }.map { (exerciseId, groupSets) ->
+        val exercise = exerciseById[exerciseId]
+        ExerciseGroupDetail(
+            exerciseName = exercise?.name ?: "动作 #$exerciseId",
+            targetMuscle = exercise?.targetMuscle ?: "",
+            sets = groupSets.sortedBy { it.setOrder }.map { s ->
+                WorkoutSet(
+                    id = s.id,
+                    sessionId = s.sessionId,
+                    exerciseId = s.exerciseId,
+                    exerciseName = exercise?.name ?: "",
+                    setOrder = s.setOrder,
+                    setType = s.setType,
+                    weightKg = s.weightKg,
+                    reps = s.reps,
+                    rpe = s.rpe,
+                    isCompleted = true
+                )
+            }
+        )
+    }
+    val day = Instant.ofEpochMilli(session.startTime).atZone(ZoneId.systemDefault()).toLocalDate()
+    return WorkoutDayDetail(
+        date = day,
+        title = session.title,
+        totalVolumeKg = completed.filter { it.setType != "WARMUP" }.sumOf { it.weightKg * it.reps },
+        groups = groups,
+        notes = notes
     )
 }

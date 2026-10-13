@@ -18,26 +18,37 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
+import com.baoji.fitness.core.designsystem.icons.LucideIcons
+import com.baoji.fitness.data.healthconnect.HealthConnectWriter
+import com.baoji.fitness.data.repository.AiShareContext
+import com.baoji.fitness.ui.components.AiSharePreviewBottomSheet
+import kotlinx.coroutines.launch
 import com.baoji.fitness.core.theme.AppleBlack
 import com.baoji.fitness.core.theme.AppleCautionOrange
 import com.baoji.fitness.core.theme.AppleFitnessGreen
@@ -70,6 +81,26 @@ fun CalendarScreen(
     val dayMetric by viewModel.dayMetric.collectAsState()
     val habit by viewModel.habit.collectAsState()
     val reminderConfig by viewModel.reminderConfig.collectAsState()
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var hasHealthPermissions by remember { mutableStateOf(false) }
+    val isHealthConnectAvailable = remember { HealthConnectWriter.isAvailable(context) }
+
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        hasHealthPermissions = granted.containsAll(HealthConnectWriter.PERMISSIONS)
+    }
+
+    LaunchedEffect(reminderConfig.healthConnectEnabled) {
+        if (isHealthConnectAvailable) {
+            hasHealthPermissions = HealthConnectWriter.hasPermissions(context)
+        }
+    }
+
+    var shareContextToPreview by remember { mutableStateOf<AiShareContext?>(null) }
+    var showShareSheet by remember { mutableStateOf(false) }
 
     var showDayMetricSheet by remember { mutableStateOf(false) }
 
@@ -131,6 +162,22 @@ fun CalendarScreen(
             onToggleDay = { viewModel.toggleTrainingDay(it) }
         )
 
+        // P1：Health Connect 自动同步设置
+        HealthConnectSettingsCard(
+            enabled = reminderConfig.healthConnectEnabled,
+            hasPermissions = hasHealthPermissions,
+            isAvailable = isHealthConnectAvailable,
+            onToggle = { enabled ->
+                viewModel.setHealthConnectEnabled(enabled)
+                if (enabled && isHealthConnectAvailable && !hasHealthPermissions) {
+                    healthConnectLauncher.launch(HealthConnectWriter.PERMISSIONS)
+                }
+            },
+            onRequestPermissions = {
+                healthConnectLauncher.launch(HealthConnectWriter.PERMISSIONS)
+            }
+        )
+
         Spacer(modifier = Modifier.height(80.dp))
     }
 
@@ -141,7 +188,26 @@ fun CalendarScreen(
             detail = dayDetail,
             metric = dayMetric,
             onRecordMetric = { showDayMetricSheet = true },
+            onShareToAi = {
+                dayDetail?.let { detail ->
+                    scope.launch {
+                        shareContextToPreview = viewModel.getAiShareContext(detail)
+                        showShareSheet = true
+                    }
+                }
+            },
             onDismiss = { viewModel.selectDay(null) }
+        )
+    }
+
+    // AI 分享预览弹层
+    if (showShareSheet) {
+        AiSharePreviewBottomSheet(
+            shareContext = shareContextToPreview,
+            onDismiss = {
+                showShareSheet = false
+                shareContextToPreview = null
+            }
         )
     }
 
@@ -539,6 +605,7 @@ private fun DayDetailSheet(
     detail: WorkoutDayDetail?,
     metric: BodyMetricEntity?,
     onRecordMetric: () -> Unit,
+    onShareToAi: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val dateFormat = remember { DateTimeFormatter.ofPattern("M月d日 EEEE", Locale.CHINESE) }
@@ -565,20 +632,54 @@ private fun DayDetailSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column {
-                Text(
-                    text = day.format(dateFormat),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppleFitnessGreen,
-                    letterSpacing = 0.5.sp
-                )
-                Text(
-                    text = detail?.title ?: "加载中…",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppleTextPrimary
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = day.format(dateFormat),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleFitnessGreen,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = detail?.title ?: "加载中…",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleTextPrimary
+                    )
+                }
+
+                if (detail != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppleFitnessGreen)
+                            .clickable { onShareToAi() }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Sparkles,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "分享给 AI",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
             }
 
             if (detail != null) {
@@ -686,5 +787,99 @@ private fun DetailMetric(label: String, value: String, valueColor: Color) {
             fontFamily = FontFamily.Monospace,
             color = valueColor
         )
+    }
+}
+
+/** P1：Health Connect 设置与本地隐私保障告示。 */
+@Composable
+private fun HealthConnectSettingsCard(
+    enabled: Boolean,
+    hasPermissions: Boolean,
+    isAvailable: Boolean,
+    onToggle: (Boolean) -> Unit,
+    onRequestPermissions: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(AppleGray6)
+            .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(
+                    text = "Health Connect 自动同步",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppleTextPrimary
+                )
+                Text(
+                    text = "归档训练与记录身体数据时，自动写入系统健康底座（力量训练/体重/体脂），供 AI 教练（如 Muse）在后台读取。",
+                    fontSize = 11.sp,
+                    color = AppleTextSecondary,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            TogglePill(checked = enabled, onCheckedChange = onToggle)
+        }
+
+        // 权限状态与申请
+        if (enabled && isAvailable && !hasPermissions) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppleCautionOrange.copy(alpha = 0.12f))
+                    .border(0.5.dp, AppleCautionOrange.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "尚未授予系统写入权限",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AppleCautionOrange
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AppleCautionOrange)
+                        .clickable { onRequestPermissions() }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "立即授权",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+
+        // 本地隐私安全告示
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppleGray5)
+                .padding(horizontal = 12.dp, vertical = 9.dp)
+        ) {
+            Text(
+                text = "🔒 本地安全：数据仅保存在本机系统 Health Connect 与本地数据库中，不经过任何自建云端或第三方服务器，100% 掌握在您的设备中。",
+                fontSize = 10.sp,
+                color = AppleTextTertiary,
+                lineHeight = 15.sp
+            )
+        }
     }
 }

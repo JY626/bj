@@ -3,6 +3,7 @@ package com.baoji.fitness.ui.calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baoji.fitness.core.database.entity.BodyMetricEntity
+import com.baoji.fitness.data.repository.AiShareContext
 import com.baoji.fitness.data.repository.BodyMetricRepository
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.data.settings.ReminderConfig
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -123,5 +125,14 @@ class CalendarViewModel(
 
     fun selectDay(day: LocalDate?) {
         _selectedDay.value = day
+    }
+
+    suspend fun getAiShareContext(detail: WorkoutDayDetail): AiShareContext {
+        val metrics = bodyMetricRepository.observeAll().first()
+        return repository.getAiShareContext(detail, metrics)
+    }
+
+    fun setHealthConnectEnabled(enabled: Boolean) {
+        reminderSettings.setHealthConnectEnabled(enabled)
     }
 }

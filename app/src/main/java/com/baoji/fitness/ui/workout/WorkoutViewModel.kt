@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.baoji.fitness.core.database.entity.ExerciseEntity
 import com.baoji.fitness.core.database.entity.WorkoutSessionEntity
 import com.baoji.fitness.core.database.entity.WorkoutSetEntity
+import com.baoji.fitness.data.repository.AiShareContext
 import com.baoji.fitness.data.repository.WorkoutRepository
+import com.baoji.fitness.data.repository.buildActiveSessionDetail
 import com.baoji.fitness.data.settings.ReminderSettings
 import com.baoji.fitness.domain.algorithm.OverloadCalculator
 import com.baoji.fitness.domain.algorithm.SessionDayGate
@@ -394,6 +396,20 @@ class WorkoutViewModel(
         _restSecondsLeft.value = 0
         _isRestTimerVisible.value = false
         timerJob?.cancel()
+    }
+
+    /** 打包当前训练上下文用于分享给 AI */
+    suspend fun getAiShareContextForCurrent(notes: String = ""): AiShareContext? {
+        val session = activeSession.value ?: return null
+        val sets = exerciseGroups.value.flatMap { it.sets }
+        val exercises = allExercises.value
+        val detail = buildActiveSessionDetail(session, sets, exercises, notes)
+        return repository.getAiShareContext(detail)
+    }
+
+    /** 为历史或归档训练详情打包上下文用于分享给 AI */
+    suspend fun getAiShareContextForDetail(detail: WorkoutDayDetail): AiShareContext {
+        return repository.getAiShareContext(detail)
     }
 
     companion object {

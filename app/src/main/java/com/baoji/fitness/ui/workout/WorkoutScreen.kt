@@ -33,7 +33,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import com.baoji.fitness.data.repository.AiShareContext
+import com.baoji.fitness.ui.components.AiSharePreviewBottomSheet
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +111,9 @@ fun WorkoutScreen(
     var showAddExerciseSheet by remember { mutableStateOf(false) }
     var showSummaryDialog by remember { mutableStateOf(false) }
     var showTemplateSheet by remember { mutableStateOf(false) }
+    var shareContextToPreview by remember { mutableStateOf<AiShareContext?>(null) }
+    var showShareSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     // 折叠已完成动作：练到第 6 个动作时不用一路往下滚
     var hideCompletedExercises by remember { mutableStateOf(false) }
     var activeEditingSet by remember { mutableStateOf<Pair<ExerciseEntity, WorkoutSetEntity>?>(null) }
@@ -229,22 +236,58 @@ fun WorkoutScreen(
                             )
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(AppleFitnessGreen)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showSummaryDialog = true
+                        if (activeSession != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(AppleFitnessGreen)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showSummaryDialog = true
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = "完成",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        } else if (todaySummary != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(AppleFitnessGreen)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        scope.launch {
+                                            todaySummary?.let {
+                                                shareContextToPreview = viewModel.getAiShareContextForDetail(it)
+                                                showShareSheet = true
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = LucideIcons.Sparkles,
+                                        contentDescription = null,
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = "分享给 AI",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
                                 }
-                                .padding(horizontal = 14.dp, vertical = 7.dp)
-                        ) {
-                            Text(
-                                text = "完成",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
+                            }
                         }
                     }
                 }
@@ -625,7 +668,27 @@ fun WorkoutScreen(
                     viewModel.finishCurrentWorkout(notes)
                     showSummaryDialog = false
                 },
+                onShareToAi = { notes ->
+                    scope.launch {
+                        val ctx = viewModel.getAiShareContextForCurrent(notes)
+                        viewModel.finishCurrentWorkout(notes)
+                        showSummaryDialog = false
+                        shareContextToPreview = ctx
+                        showShareSheet = true
+                    }
+                },
                 onDismiss = { showSummaryDialog = false }
+            )
+        }
+
+        // AI Share Preview Bottom Sheet
+        if (showShareSheet) {
+            AiSharePreviewBottomSheet(
+                shareContext = shareContextToPreview,
+                onDismiss = {
+                    showShareSheet = false
+                    shareContextToPreview = null
+                }
             )
         }
 
@@ -1411,6 +1474,7 @@ private fun WorkoutSummaryDialog(
     totalVolumeKg: Int,
     completedSetsCount: Int,
     onConfirm: (String) -> Unit,
+    onShareToAi: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var noteText by remember { mutableStateOf("") }
@@ -1554,42 +1618,76 @@ private fun WorkoutSummaryDialog(
             }
 
             // Actions
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // 主推荐操作：保存并分享给 AI (Muse)
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(AppleGray5)
-                        .clickable { onDismiss() }
-                        .padding(vertical = 11.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "继续训练",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = AppleTextSecondary
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(AppleFitnessGreen)
-                        .clickable { onConfirm(noteText) }
-                        .padding(vertical = 11.dp),
+                        .clickable { onShareToAi(noteText) }
+                        .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "保存并归档",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Sparkles,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "保存并分享给 AI (Muse)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppleGray5)
+                            .clickable { onDismiss() }
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "继续训练",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = AppleTextSecondary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppleGray5)
+                            .clickable { onConfirm(noteText) }
+                            .padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "仅保存归档",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleTextPrimary
+                        )
+                    }
                 }
             }
         }

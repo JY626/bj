@@ -77,6 +77,9 @@ dependencies {
     // WorkManager（训练日提醒）
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Health Connect（同步训练与身体数据给 AI 教练）
+    implementation(libs.androidx.health.connect)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -13,7 +13,8 @@ import java.time.ZoneId
  */
 class BodyMetricRepository(
     private val dao: BodyMetricDao,
-    private val zone: ZoneId = ZoneId.systemDefault()
+    private val zone: ZoneId = ZoneId.systemDefault(),
+    private val onMetricSaved: (suspend (BodyMetricEntity) -> Unit)? = null
 ) {
     fun observeLatest(): Flow<BodyMetricEntity?> = dao.getLatest()
 
@@ -44,18 +45,19 @@ class BodyMetricRepository(
     ) {
         val date = startOfDayMillis(day)
         val existing = dao.getByDate(date)
-        dao.upsert(
-            BodyMetricEntity(
-                id = existing?.id ?: 0,
-                date = date,
-                weightKg = weightKg ?: existing?.weightKg,
-                bodyFatPct = bodyFatPct ?: existing?.bodyFatPct,
-                heightCm = heightCm ?: existing?.heightCm ?: dao.getLatestHeight(),
-                chestCm = chestCm ?: existing?.chestCm,
-                waistCm = waistCm ?: existing?.waistCm,
-                armCm = armCm ?: existing?.armCm,
-                note = note.ifBlank { existing?.note ?: "" }
-            )
+        val entity = BodyMetricEntity(
+            id = existing?.id ?: 0,
+            date = date,
+            weightKg = weightKg ?: existing?.weightKg,
+            bodyFatPct = bodyFatPct ?: existing?.bodyFatPct,
+            heightCm = heightCm ?: existing?.heightCm ?: dao.getLatestHeight(),
+            chestCm = chestCm ?: existing?.chestCm,
+            waistCm = waistCm ?: existing?.waistCm,
+            armCm = armCm ?: existing?.armCm,
+            note = note.ifBlank { existing?.note ?: "" }
         )
+        val id = dao.upsert(entity)
+        val saved = entity.copy(id = if (entity.id == 0L) id else entity.id)
+        onMetricSaved?.invoke(saved)
     }
 }
