@@ -17,10 +17,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.WeightRecord
+import com.baoji.fitness.data.healthconnect.HealthConnectWriter
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +78,34 @@ fun BodyScreen(
 
     var showSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val isHealthAvailable = remember { HealthConnectWriter.isAvailable(context) }
+    var hasHealthPermissions by remember { mutableStateOf(false) }
+
+    val healthConnectLauncher = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        hasHealthPermissions = granted.contains(HealthPermission.getReadPermission(WeightRecord::class)) ||
+            granted.contains(HealthPermission.getReadPermission(BodyFatRecord::class))
+        if (hasHealthPermissions) {
+            scope.launch {
+                HealthConnectWriter.syncBodyMetricsFromHealthConnect(context, bodyMetricRepository)
+                    .onSuccess { count ->
+                        val msg = if (count > 0) "成功从 Health Connect 同步 $count 天数据" else "已是最新，无待同步数据"
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }.onFailure { err ->
+                        Toast.makeText(context, "同步失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (isHealthAvailable) {
+            hasHealthPermissions = HealthConnectWriter.hasReadPermissions(context)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -98,7 +135,24 @@ fun BodyScreen(
         BodyMetricsCard(
             latest = latest,
             history = history,
-            onRecord = { showSheet = true }
+            onRecord = { showSheet = true },
+            onSyncHealth = if (isHealthAvailable) {
+                {
+                    if (!hasHealthPermissions) {
+                        healthConnectLauncher.launch(HealthConnectWriter.PERMISSIONS)
+                    } else {
+                        scope.launch {
+                            HealthConnectWriter.syncBodyMetricsFromHealthConnect(context, bodyMetricRepository)
+                                .onSuccess { count ->
+                                    val msg = if (count > 0) "成功从 Health Connect 同步 $count 天数据" else "已是最新，无待同步数据"
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }.onFailure { err ->
+                                    Toast.makeText(context, "同步失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                                }
+                        }
+                    }
+                }
+            } else null
         )
 
         // 历史记录列表：最近 30 条，方便回看趋势
@@ -178,7 +232,8 @@ fun BodyScreen(
 private fun BodyMetricsCard(
     latest: BodyMetricEntity?,
     history: List<BodyMetricEntity>,
-    onRecord: () -> Unit
+    onRecord: () -> Unit,
+    onSyncHealth: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -210,29 +265,60 @@ private fun BodyMetricsCard(
                     color = AppleTextSecondary
                 )
             }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(AppleGray5)
-                    .clickable { onRecord() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (onSyncHealth != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AppleGray5)
+                            .clickable { onSyncHealth() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Activity,
+                                contentDescription = null,
+                                tint = AppleFitnessGreen,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "同步",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppleFitnessGreen
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(AppleGray5)
+                        .clickable { onRecord() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Icon(
-                        imageVector = LucideIcons.Plus,
-                        contentDescription = null,
-                        tint = AppleFitnessGreen,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = if (latest == null) "记一次" else "记录",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppleFitnessGreen
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = null,
+                            tint = AppleFitnessGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = if (latest == null) "记一次" else "记录",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleFitnessGreen
+                        )
+                    }
                 }
             }
         }

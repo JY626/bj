@@ -29,6 +29,8 @@ class BodyMetricRepository(
     fun toLocalDate(epochMillis: Long): LocalDate =
         Instant.ofEpochMilli(epochMillis).atZone(zone).toLocalDate()
 
+    suspend fun getByDate(date: Long): BodyMetricEntity? = dao.getByDate(date)
+
     /**
      * 写入某天的身体数据。传 null 表示该项当天没测 —— 会**保留**已存在的旧值，
      * 避免「只称了体重」把上次记的腰围清空。

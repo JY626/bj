@@ -46,4 +46,9 @@ class BaojiApplication : Application() {
             }
         )
     }
+
+    /** 数据备份与恢复管理器 */
+    val backupManager by lazy {
+        com.baoji.fitness.data.backup.BackupManager(this, database)
+    }
 }

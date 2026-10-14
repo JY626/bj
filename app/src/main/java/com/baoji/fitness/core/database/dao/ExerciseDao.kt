@@ -26,4 +26,13 @@ interface ExerciseDao {
 
     @Query("UPDATE exercises SET personalRecordWeight = :weight, personalRecordReps = :reps WHERE id = :exerciseId")
     suspend fun updatePR(exerciseId: Long, weight: Double, reps: Int)
+
+    @Query("SELECT * FROM exercises ORDER BY id ASC")
+    suspend fun getAllExercisesList(): List<ExerciseEntity>
+
+    @Query("SELECT * FROM exercises WHERE name = :name LIMIT 1")
+    suspend fun getExerciseByName(name: String): ExerciseEntity?
+
+    @Query("DELETE FROM exercises")
+    suspend fun deleteAllExercises()
 }

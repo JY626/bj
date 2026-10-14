@@ -33,4 +33,14 @@ interface BodyMetricDao {
     /** 最近一次填过的身高（身高很少变，写一次就沿用）。 */
     @Query("SELECT heightCm FROM body_metrics WHERE heightCm IS NOT NULL ORDER BY date DESC LIMIT 1")
     suspend fun getLatestHeight(): Double?
+
+    // ---- 数据备份与恢复 ----
+    @Query("SELECT * FROM body_metrics ORDER BY date ASC")
+    suspend fun getAllList(): List<BodyMetricEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(metrics: List<BodyMetricEntity>)
+
+    @Query("DELETE FROM body_metrics")
+    suspend fun deleteAll()
 }

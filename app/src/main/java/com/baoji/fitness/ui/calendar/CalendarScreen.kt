@@ -18,11 +18,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import com.baoji.fitness.data.backup.BackupSummary
+import com.baoji.fitness.data.backup.RestoreMode
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,8 +71,10 @@ import com.baoji.fitness.ui.components.ExerciseGroupCard
 import com.baoji.fitness.ui.library.BodyMetricSheet
 import com.baoji.fitness.ui.library.formatMetric
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -103,6 +111,33 @@ fun CalendarScreen(
     var showShareSheet by remember { mutableStateOf(false) }
 
     var showDayMetricSheet by remember { mutableStateOf(false) }
+
+    var pendingBackupSummary by remember { mutableStateOf<BackupSummary?>(null) }
+    var pendingBackupJson by remember { mutableStateOf<String?>(null) }
+
+    val importFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val jsonString = context.contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.bufferedReader().readText()
+                }
+                if (!jsonString.isNullOrBlank()) {
+                    viewModel.parseBackupSummary(jsonString)
+                        .onSuccess { summary ->
+                            pendingBackupSummary = summary
+                            pendingBackupJson = jsonString
+                        }
+                        .onFailure {
+                            Toast.makeText(context, "备份文件解析失败，请确保格式正确", Toast.LENGTH_SHORT).show()
+                        }
+                }
+            }.onFailure {
+                Toast.makeText(context, "读取文件失败: ${it.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -175,6 +210,39 @@ fun CalendarScreen(
             },
             onRequestPermissions = {
                 healthConnectLauncher.launch(HealthConnectWriter.PERMISSIONS)
+            },
+            onSync = {
+                if (isHealthConnectAvailable && !hasHealthPermissions) {
+                    healthConnectLauncher.launch(HealthConnectWriter.PERMISSIONS)
+                } else {
+                    viewModel.syncFromHealthConnect(context) { result ->
+                        result.onSuccess { count ->
+                            if (count > 0) {
+                                Toast.makeText(context, "成功从 Health Connect 同步 $count 天身体数据！", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "暂无更新的身体数据需要同步", Toast.LENGTH_SHORT).show()
+                            }
+                        }.onFailure { err ->
+                            Toast.makeText(context, "同步失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        )
+
+        // P0：数据备份与恢复设置
+        DataBackupSettingsCard(
+            onExport = {
+                viewModel.exportBackup { result ->
+                    result.onSuccess { file ->
+                        viewModel.shareBackup(file)
+                    }.onFailure { err ->
+                        Toast.makeText(context, "导出失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onImport = {
+                importFileLauncher.launch(arrayOf("application/json", "*/*"))
             }
         )
 
@@ -220,6 +288,32 @@ fun CalendarScreen(
             onSave = { weight, fat, height, chest, waist, arm ->
                 viewModel.saveMetric(selectedDay!!, weight, fat, height, chest, waist, arm)
                 showDayMetricSheet = false
+            }
+        )
+    }
+
+    // P0：恢复备份确认弹层
+    if (pendingBackupSummary != null && pendingBackupJson != null) {
+        RestoreConfirmationDialog(
+            summary = pendingBackupSummary!!,
+            onConfirm = { mode ->
+                viewModel.restoreBackup(pendingBackupJson!!, mode) { result ->
+                    result.onSuccess { res ->
+                        Toast.makeText(
+                            context,
+                            "恢复成功！已导入 ${res.restoredSessions} 次训练、${res.restoredBodyMetrics} 条身体数据",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }.onFailure { err ->
+                        Toast.makeText(context, "恢复失败: ${err.message}", Toast.LENGTH_SHORT).show()
+                    }
+                    pendingBackupSummary = null
+                    pendingBackupJson = null
+                }
+            },
+            onDismiss = {
+                pendingBackupSummary = null
+                pendingBackupJson = null
             }
         )
     }
@@ -797,7 +891,8 @@ private fun HealthConnectSettingsCard(
     hasPermissions: Boolean,
     isAvailable: Boolean,
     onToggle: (Boolean) -> Unit,
-    onRequestPermissions: () -> Unit
+    onRequestPermissions: () -> Unit,
+    onSync: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -815,13 +910,13 @@ private fun HealthConnectSettingsCard(
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
-                    text = "Health Connect 自动同步",
+                    text = "Health Connect 双向同步",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = AppleTextPrimary
                 )
                 Text(
-                    text = "归档训练与记录身体数据时，自动写入系统健康底座（力量训练/体重/体脂），供 AI 教练（如 Muse）在后台读取。",
+                    text = "归档训练自动写入健康底座供 Muse 读取；亦可从系统健康底座（如智能秤）自动读取体重/体脂记录进行闭环同步。",
                     fontSize = 11.sp,
                     color = AppleTextSecondary,
                     lineHeight = 16.sp,
@@ -829,6 +924,44 @@ private fun HealthConnectSettingsCard(
                 )
             }
             TogglePill(checked = enabled, onCheckedChange = onToggle)
+        }
+
+        // 闭环同步触发按钮
+        if (enabled && isAvailable) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AppleGray5)
+                    .clickable { onSync() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Activity,
+                        contentDescription = null,
+                        tint = AppleFitnessGreen,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "从 Health Connect 同步最新身体指标",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextPrimary
+                    )
+                }
+                Text(
+                    text = "立即同步 ›",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppleFitnessGreen
+                )
+            }
         }
 
         // 权限状态与申请
@@ -844,7 +977,7 @@ private fun HealthConnectSettingsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "尚未授予系统写入权限",
+                    text = "尚未授予系统完整读写权限",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     color = AppleCautionOrange
@@ -882,4 +1015,170 @@ private fun HealthConnectSettingsCard(
             )
         }
     }
+}
+
+/** P0：数据备份与恢复卡片 */
+@Composable
+private fun DataBackupSettingsCard(
+    onExport: () -> Unit,
+    onImport: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(AppleGray6)
+            .border(1.dp, AppleHairline, RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column {
+            Text(
+                text = "数据备份与恢复",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppleTextPrimary
+            )
+            Text(
+                text = "100% 离线单机数据安全保障。支持导出全部训练记录与身体指标为 JSON 文件，或从备份文件恢复（支持合并与覆盖）。",
+                fontSize = 11.sp,
+                color = AppleTextSecondary,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AppleFitnessGreen)
+                    .clickable { onExport() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Share2,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "导出数据备份",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AppleGray5)
+                    .border(0.5.dp, AppleHairline, RoundedCornerShape(14.dp))
+                    .clickable { onImport() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Layers,
+                        contentDescription = null,
+                        tint = AppleTextPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "从文件恢复",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppleTextPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** P0：恢复导入确认弹层 */
+@Composable
+private fun RestoreConfirmationDialog(
+    summary: BackupSummary,
+    onConfirm: (RestoreMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.CHINESE) }
+    val exportDateText = remember(summary.exportedAt) {
+        Instant.ofEpochMilli(summary.exportedAt).atZone(ZoneId.systemDefault()).format(formatter)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AppleGray6,
+        title = {
+            Text(
+                text = "发现备份文件",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppleTextPrimary
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "备份时间：$exportDateText",
+                    fontSize = 12.sp,
+                    color = AppleTextSecondary
+                )
+                Text(
+                    text = "• 训练记录：${summary.sessionCount} 次（共 ${summary.setCount} 组）\n" +
+                           "• 身体数据：${summary.bodyMetricCount} 条\n" +
+                           "• 动作库：${summary.exerciseCount} 个动作",
+                    fontSize = 12.sp,
+                    color = AppleTextPrimary,
+                    lineHeight = 18.sp
+                )
+                Text(
+                    text = "请选择恢复方式：\n• 合并导入（推荐）：保留现有记录，补充历史数据并按时间去重；\n• 覆盖导入：清空当前数据，完全替换为该备份。",
+                    fontSize = 11.sp,
+                    color = AppleTextTertiary,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(RestoreMode.MERGE) }
+            ) {
+                Text("合并导入 (推荐)", color = AppleFitnessGreen, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = { onConfirm(RestoreMode.OVERWRITE) }
+                ) {
+                    Text("覆盖导入", color = Color(0xFFFF453A))
+                }
+                TextButton(
+                    onClick = onDismiss
+                ) {
+                    Text("取消", color = AppleTextSecondary)
+                }
+            }
+        }
+    )
 }

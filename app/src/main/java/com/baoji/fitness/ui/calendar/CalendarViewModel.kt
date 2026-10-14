@@ -24,6 +24,14 @@ import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
 
+import android.content.Context
+import com.baoji.fitness.data.backup.BackupManager
+import com.baoji.fitness.data.backup.BackupSummary
+import com.baoji.fitness.data.backup.RestoreMode
+import com.baoji.fitness.data.backup.RestoreResult
+import com.baoji.fitness.data.healthconnect.HealthConnectWriter
+import java.io.File
+
 /** M2 习惯面板：连续天数 + 本周还剩几练。 */
 data class HabitSummary(
     val currentStreak: Int = 0,
@@ -34,7 +42,8 @@ data class HabitSummary(
 class CalendarViewModel(
     private val repository: WorkoutRepository,
     private val bodyMetricRepository: BodyMetricRepository,
-    private val reminderSettings: ReminderSettings
+    private val reminderSettings: ReminderSettings,
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     /** 已打卡的训练日 → 训练类型（推/拉/腿），供月历显示。 */
@@ -134,5 +143,38 @@ class CalendarViewModel(
 
     fun setHealthConnectEnabled(enabled: Boolean) {
         reminderSettings.setHealthConnectEnabled(enabled)
+    }
+
+    // ---- P0 数据备份与恢复 ----
+
+    fun exportBackup(onResult: (Result<File>) -> Unit) {
+        viewModelScope.launch {
+            val result = backupManager.exportBackup()
+            onResult(result)
+        }
+    }
+
+    fun shareBackup(file: File) {
+        backupManager.shareBackup(file)
+    }
+
+    fun parseBackupSummary(jsonString: String): Result<BackupSummary> {
+        return backupManager.parseSummary(jsonString)
+    }
+
+    fun restoreBackup(jsonString: String, mode: RestoreMode, onResult: (Result<RestoreResult>) -> Unit) {
+        viewModelScope.launch {
+            val result = backupManager.restore(jsonString, mode)
+            onResult(result)
+        }
+    }
+
+    // ---- P1 Health Connect 闭环读取与同步 ----
+
+    fun syncFromHealthConnect(context: Context, onResult: (Result<Int>) -> Unit) {
+        viewModelScope.launch {
+            val result = HealthConnectWriter.syncBodyMetricsFromHealthConnect(context, bodyMetricRepository)
+            onResult(result)
+        }
     }
 }

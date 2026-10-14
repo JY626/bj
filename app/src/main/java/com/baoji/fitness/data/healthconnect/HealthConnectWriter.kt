@@ -19,25 +19,40 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import com.baoji.fitness.data.repository.BodyMetricRepository
+import java.time.temporal.ChronoUnit
+
 /**
- * Health Connect 数据写入器。
+ * Health Connect 数据同步器（支持双向读写）。
  *
- * 负责把 App 内部的训练记录与身体数据写入 Android 系统的 Health Connect，
- * 供 AI 教练（如 Muse）在后台直接读取。
+ * 负责把 App 内部的训练记录与身体数据写入 Android 系统的 Health Connect（供 AI 教练 Muse 等读取），
+ * 以及从系统健康底座（如智能体脂秤、薄荷健康等）自动读取体重/体脂记录进行闭环同步。
  *
  * 核心保证：
  * 1. **口径红线**：排除热身组；写入的累计容量与训练页显示的数字逐字对齐；
- * 2. **幂等写入**：通过固定格式 clientRecordId 去重，重复归档/更新不会产生脏数据；
- * 3. **降级与防崩溃**：设备未安装 Health Connect 或权限未就绪时静默跳过，绝不阻断正常归档流程。
+ * 2. **幂等读写**：通过固定格式 clientRecordId 去重，重复归档/更新不会产生脏数据；
+ * 3. **降级与防崩溃**：设备未安装 Health Connect 或权限未就绪时静默跳过，绝不阻断正常流程。
  */
 object HealthConnectWriter {
 
-    /** 写入所需的全部权限列表。 */
-    val PERMISSIONS: Set<String> = setOf(
+    /** 写入所需的权限列表。 */
+    val WRITE_PERMISSIONS: Set<String> = setOf(
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getWritePermission(WeightRecord::class),
         HealthPermission.getWritePermission(BodyFatRecord::class)
     )
+
+    /** 读取所需的权限列表。 */
+    val READ_PERMISSIONS: Set<String> = setOf(
+        HealthPermission.getReadPermission(WeightRecord::class),
+        HealthPermission.getReadPermission(BodyFatRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+    )
+
+    /** 全量权限列表（读+写）。 */
+    val PERMISSIONS: Set<String> = WRITE_PERMISSIONS + READ_PERMISSIONS
 
     /** 检查系统 Health Connect SDK 是否可用。 */
     fun isAvailable(context: Context): Boolean {
@@ -48,13 +63,38 @@ object HealthConnectWriter {
         }
     }
 
-    /** 检查是否已获得全部写入权限。 */
+    /** 检查是否已获得全部权限。 */
     suspend fun hasPermissions(context: Context): Boolean {
         if (!isAvailable(context)) return false
         return try {
             val client = HealthConnectClient.getOrCreate(context)
             val granted = client.permissionController.getGrantedPermissions()
-            granted.containsAll(PERMISSIONS)
+            granted.containsAll(WRITE_PERMISSIONS)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** 检查是否已获得写入权限。 */
+    suspend fun hasWritePermissions(context: Context): Boolean {
+        if (!isAvailable(context)) return false
+        return try {
+            val client = HealthConnectClient.getOrCreate(context)
+            val granted = client.permissionController.getGrantedPermissions()
+            granted.containsAll(WRITE_PERMISSIONS)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** 检查是否已获得读取权限。 */
+    suspend fun hasReadPermissions(context: Context): Boolean {
+        if (!isAvailable(context)) return false
+        return try {
+            val client = HealthConnectClient.getOrCreate(context)
+            val granted = client.permissionController.getGrantedPermissions()
+            granted.contains(HealthPermission.getReadPermission(WeightRecord::class)) ||
+                granted.contains(HealthPermission.getReadPermission(BodyFatRecord::class))
         } catch (_: Exception) {
             false
         }
@@ -218,5 +258,125 @@ object HealthConnectWriter {
             name.contains("举腿") || name.contains("卷腹") || name.contains("平板") -> ExerciseSegment.EXERCISE_SEGMENT_TYPE_CRUNCH
             else -> ExerciseSegment.EXERCISE_SEGMENT_TYPE_WEIGHTLIFTING
         }
+    }
+
+    /**
+     * 从 Health Connect 读取最近指定天数的体重与体脂数据
+     */
+    suspend fun readBodyMetrics(
+        context: Context,
+        days: Int = 60
+    ): Result<List<BodyMetricEntity>> = runCatching {
+        if (!isAvailable(context)) return Result.success(emptyList())
+
+        val client = HealthConnectClient.getOrCreate(context)
+        val granted = client.permissionController.getGrantedPermissions()
+        val canReadWeight = granted.contains(HealthPermission.getReadPermission(WeightRecord::class))
+        val canReadFat = granted.contains(HealthPermission.getReadPermission(BodyFatRecord::class))
+
+        if (!canReadWeight && !canReadFat) return Result.success(emptyList())
+
+        val startTime = Instant.now().minus(days.toLong(), ChronoUnit.DAYS)
+        val timeFilter = TimeRangeFilter.after(startTime)
+
+        val weights = if (canReadWeight) {
+            val request = ReadRecordsRequest(
+                recordType = WeightRecord::class,
+                timeRangeFilter = timeFilter
+            )
+            client.readRecords(request).records
+        } else emptyList()
+
+        val bodyFats = if (canReadFat) {
+            val request = ReadRecordsRequest(
+                recordType = BodyFatRecord::class,
+                timeRangeFilter = timeFilter
+            )
+            client.readRecords(request).records
+        } else emptyList()
+
+        // 聚合同一天的数据（以当天本地 0 点 epoch millis 为键）
+        val metricsByDate = mutableMapOf<Long, Pair<Double?, Double?>>()
+
+        weights.forEach { r ->
+            val localDate = r.time.atZone(ZoneId.systemDefault()).toLocalDate()
+            val dayEpoch = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val cur = metricsByDate[dayEpoch] ?: Pair(null, null)
+            metricsByDate[dayEpoch] = cur.copy(first = r.weight.inKilograms)
+        }
+
+        bodyFats.forEach { r ->
+            val localDate = r.time.atZone(ZoneId.systemDefault()).toLocalDate()
+            val dayEpoch = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val cur = metricsByDate[dayEpoch] ?: Pair(null, null)
+            metricsByDate[dayEpoch] = cur.copy(second = r.percentage.value)
+        }
+
+        metricsByDate.map { (date, pair) ->
+            BodyMetricEntity(
+                id = 0,
+                date = date,
+                weightKg = pair.first,
+                bodyFatPct = pair.second,
+                note = ""
+            )
+        }.sortedBy { it.date }
+    }
+
+    /**
+     * 将 Health Connect 中读取到的身体数据自动闭环同步至本地数据库
+     * 规则：若本地已有该日期记录，仅在本地字段为 null 时补全（避免覆盖用户手动记录的围度与备注）
+     * @return 成功更新或新增的天数
+     */
+    suspend fun syncBodyMetricsFromHealthConnect(
+        context: Context,
+        bodyMetricRepository: BodyMetricRepository,
+        days: Int = 60
+    ): Result<Int> = runCatching {
+        val records = readBodyMetrics(context, days).getOrThrow()
+        if (records.isEmpty()) return Result.success(0)
+
+        var syncedCount = 0
+        records.forEach { incoming ->
+            val existing = bodyMetricRepository.getByDate(incoming.date)
+            val day = Instant.ofEpochMilli(incoming.date).atZone(ZoneId.systemDefault()).toLocalDate()
+            if (existing == null) {
+                bodyMetricRepository.upsert(
+                    day = day,
+                    weightKg = incoming.weightKg,
+                    bodyFatPct = incoming.bodyFatPct,
+                    note = "从 Health Connect 同步"
+                )
+                syncedCount++
+            } else {
+                var changed = false
+                var newWeight = existing.weightKg
+                var newFat = existing.bodyFatPct
+
+                if (newWeight == null && incoming.weightKg != null) {
+                    newWeight = incoming.weightKg
+                    changed = true
+                }
+                if (newFat == null && incoming.bodyFatPct != null) {
+                    newFat = incoming.bodyFatPct
+                    changed = true
+                }
+
+                if (changed) {
+                    bodyMetricRepository.upsert(
+                        day = day,
+                        weightKg = newWeight,
+                        bodyFatPct = newFat,
+                        heightCm = existing.heightCm,
+                        chestCm = existing.chestCm,
+                        waistCm = existing.waistCm,
+                        armCm = existing.armCm,
+                        note = existing.note.ifBlank { "从 Health Connect 同步" }
+                    )
+                    syncedCount++
+                }
+            }
+        }
+        syncedCount
     }
 }

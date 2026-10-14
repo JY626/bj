@@ -235,6 +235,10 @@ class WorkoutRepository(
         }
     }
 
+    /** 获取动作历史全部已完成组流（供 PR 荣誉墙与历史时间线展示） */
+    fun getHistoryForExercise(exerciseId: Long): Flow<List<WorkoutSetEntity>> =
+        workoutDao.getHistoryForExercise(exerciseId)
+
     // ---------------------------------------------------------------- M1 周期回顾
 
     /**

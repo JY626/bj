@@ -367,4 +367,36 @@ object LucideIcons {
             }
         }.build()
     }
+
+    // Share2 (Export / Share) —— Lucide "share-2"
+    val Share2: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "LucideShare2",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            path(
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                // 3 circles
+                moveTo(18f, 2f)
+                arcTo(3f, 3f, 0f, true, true, 17.99f, 2f)
+                moveTo(6f, 9f)
+                arcTo(3f, 3f, 0f, true, true, 5.99f, 9f)
+                moveTo(18f, 16f)
+                arcTo(3f, 3f, 0f, true, true, 17.99f, 16f)
+                // 2 connecting lines
+                moveTo(8.59f, 13.51f)
+                lineTo(15.42f, 17.49f)
+                moveTo(15.41f, 6.51f)
+                lineTo(8.59f, 10.49f)
+            }
+        }.build()
+    }
 }
+

@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
                 return CalendarViewModel(
                     repository = app.workoutRepository,
                     bodyMetricRepository = app.bodyMetricRepository,
-                    reminderSettings = app.reminderSettings
+                    reminderSettings = app.reminderSettings,
+                    backupManager = app.backupManager
                 ) as T
             }
         }

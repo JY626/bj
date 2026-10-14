@@ -82,4 +82,23 @@ interface WorkoutDao {
 
     @Query("UPDATE workout_sets SET rpe = :rpe WHERE id = :setId")
     suspend fun updateSetRpe(setId: Long, rpe: Double?)
+
+    // ---- 数据备份与恢复 ----
+    @Query("SELECT * FROM workout_sessions ORDER BY startTime ASC")
+    suspend fun getAllSessionsList(): List<WorkoutSessionEntity>
+
+    @Query("SELECT * FROM workout_sets ORDER BY sessionId ASC, setOrder ASC, id ASC")
+    suspend fun getAllSetsList(): List<WorkoutSetEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSessions(sessions: List<WorkoutSessionEntity>): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSets(sets: List<WorkoutSetEntity>): List<Long>
+
+    @Query("DELETE FROM workout_sessions")
+    suspend fun deleteAllSessions()
+
+    @Query("DELETE FROM workout_sets")
+    suspend fun deleteAllSets()
 }

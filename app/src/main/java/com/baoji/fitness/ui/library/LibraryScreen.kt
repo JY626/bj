@@ -56,6 +56,7 @@ import com.baoji.fitness.core.theme.AppleTextTertiary
 import com.baoji.fitness.core.theme.AppleSystemRed
 import com.baoji.fitness.data.repository.WorkoutRepository
 import com.baoji.fitness.domain.algorithm.MuscleClassifier
+import com.baoji.fitness.domain.model.PersonalRecordCalculator
 import com.baoji.fitness.ui.components.ChartPoint
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Switch
@@ -82,6 +83,7 @@ fun LibraryScreen(
 
     var selectedMuscle by remember { mutableStateOf("全部") }
     var showCreateSheet by remember { mutableStateOf(false) }
+    var selectedExerciseForDetail by remember { mutableStateOf<ExerciseEntity?>(null) }
 
     val filtered = if (selectedMuscle == "全部") {
         exercises
@@ -196,7 +198,10 @@ fun LibraryScreen(
                     )
                 }
                 filtered.forEachIndexed { index, exercise ->
-                    ExerciseListItem(exercise = exercise)
+                    ExerciseListItem(
+                        exercise = exercise,
+                        onClick = { selectedExerciseForDetail = exercise }
+                    )
                     if (index < filtered.size - 1) {
                         HorizontalDivider(color = AppleHairline, thickness = 0.5.dp)
                     }
@@ -214,16 +219,29 @@ fun LibraryScreen(
             onDismiss = { showCreateSheet = false }
         )
     }
+
+    // P2：PR 荣誉墙与动作历史时间线
+    selectedExerciseForDetail?.let { exercise ->
+        val historySets by repository.getHistoryForExercise(exercise.id).collectAsState(initial = emptyList())
+        val prSummary = remember(exercise, historySets) {
+            PersonalRecordCalculator.calculate(exercise, historySets)
+        }
+        ExerciseDetailSheet(
+            prSummary = prSummary,
+            onDismiss = { selectedExerciseForDetail = null }
+        )
+    }
 }
 
-
-
 @Composable
-private fun ExerciseListItem(exercise: ExerciseEntity) {
+private fun ExerciseListItem(
+    exercise: ExerciseEntity,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { }
+            .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -235,23 +253,41 @@ private fun ExerciseListItem(exercise: ExerciseEntity) {
                 fontWeight = FontWeight.SemiBold,
                 color = AppleTextPrimary
             )
-            val prInfo = if (exercise.personalRecordWeight > 0) {
-                " · 个人记录 ${exercise.personalRecordWeight} kg"
-            } else ""
             Text(
-                text = "${exercise.targetMuscle} · ${exercise.equipment}$prInfo",
+                text = "${exercise.targetMuscle} · ${exercise.equipment}",
                 fontSize = 11.sp,
                 color = AppleTextSecondary,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
 
-        Icon(
-            imageVector = LucideIcons.ChevronRight,
-            contentDescription = null,
-            tint = AppleTextSecondary,
-            modifier = Modifier.size(16.dp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (exercise.personalRecordWeight > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(AppleFitnessGreen.copy(alpha = 0.12f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "PR ${formatMetric(exercise.personalRecordWeight)} kg",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleFitnessGreen,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+            Icon(
+                imageVector = LucideIcons.ChevronRight,
+                contentDescription = null,
+                tint = AppleTextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
