@@ -7,6 +7,7 @@
 [English](README_EN.md) | [简体中文](README.md)
 
 [![Release](https://img.shields.io/github/v/release/JY626/rep?color=00E676&label=Release&logo=github)](https://github.com/JY626/rep/releases/latest)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Online%20Preview-00E676?logo=safari&logoColor=black)](https://jy626.github.io/rep/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.11-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![MinSdk](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
@@ -23,9 +24,11 @@ Follows **Apple Human Interface Guidelines (HIG)** obsidian dark mode aesthetic 
 
 ### 📱 Preview (Screenshots)
 
+> 💡 **Live Interactive Demo**: Try the full 1:1 pixel-perfect interactive web demo directly in your browser without installation! 👉 **[Click here to open Live Web Preview](https://jy626.github.io/rep/)** (Try checkmarking sets, volume calculation, rest timer countdown, and switching between all 5 tabs).
+
 | Workout | Overload & Analytics | Calendar & Streak | Exercise Library | Body Metrics |
 | :---: | :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01_workout.png" height="460"/> | <img src="docs/screenshots/02_analytics.png" height="460"/> | <img src="docs/screenshots/03_calendar.png" height="460"/> | <img src="docs/screenshots/04_library.png" height="460"/> | <img src="docs/screenshots/05_body.png" height="460"/> |
+| <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/01_workout.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/02_analytics.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/03_calendar.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/04_library.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/05_body.png" width="160"/></a> |
 
 </div>
 

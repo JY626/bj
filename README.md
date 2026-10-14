@@ -7,6 +7,7 @@
 [English](README_EN.md) | [简体中文](README.md)
 
 [![Release](https://img.shields.io/github/v/release/JY626/rep?color=00E676&label=Release&logo=github)](https://github.com/JY626/rep/releases/latest)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-在线交互预览-00E676?logo=safari&logoColor=black)](https://jy626.github.io/rep/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.11-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![MinSdk](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
@@ -23,9 +24,11 @@
 
 ### 📱 界面预览 (Screenshots)
 
+> 💡 **在线交互体验**：无需安装，即可在网页端 1:1 体验全套交互！👉 **[点击打开 Live Web Preview 演示页](https://jy626.github.io/rep/)**（支持打勾记容量、组间倒计时、5 个页面自由切换）。
+
 | 训练记录 (Workout) | 负荷与表现 (Overload) | 日历打卡 (Calendar) | 动作库 (Library) | 身体数据 (Body) |
 | :---: | :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01_workout.png" height="460"/> | <img src="docs/screenshots/02_analytics.png" height="460"/> | <img src="docs/screenshots/03_calendar.png" height="460"/> | <img src="docs/screenshots/04_library.png" height="460"/> | <img src="docs/screenshots/05_body.png" height="460"/> |
+| <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/01_workout.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/02_analytics.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/03_calendar.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/04_library.png" width="160"/></a> | <a href="https://jy626.github.io/rep/"><img src="docs/screenshots/05_body.png" width="160"/></a> |
 
 </div>
 
