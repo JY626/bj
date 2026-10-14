@@ -23,15 +23,9 @@
 
 ### 📱 界面预览 (Screenshots)
 
-| 训练记录主屏 | 悬浮组间休息胶囊 | 渐进负荷 & E1RM PR | 每日日历 & 习惯 | 身体指标趋势 |
+| 训练记录 (Workout) | 负荷与表现 (Overload) | 日历打卡 (Calendar) | 动作库 (Library) | 身体数据 (Body) |
 | :---: | :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01_workout.png" width="160"/> | <img src="docs/screenshots/02_rest_timer.png" width="160"/> | <img src="docs/screenshots/03_analytics.png" width="160"/> | <img src="docs/screenshots/04_calendar.png" width="160"/> | <img src="docs/screenshots/05_body.png" width="160"/> |
-
-<br/>
-
-### 🎬 快速演示 (Demo)
-
-<img src="docs/demo.gif" width="360" alt="Rep 操作演示"/>
+| <img src="docs/screenshots/01_workout.png" height="460"/> | <img src="docs/screenshots/02_analytics.png" height="460"/> | <img src="docs/screenshots/03_calendar.png" height="460"/> | <img src="docs/screenshots/04_library.png" height="460"/> | <img src="docs/screenshots/05_body.png" height="460"/> |
 
 </div>
 

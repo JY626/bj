@@ -23,15 +23,9 @@ Follows **Apple Human Interface Guidelines (HIG)** obsidian dark mode aesthetic 
 
 ### 📱 Preview (Screenshots)
 
-| Workout Logging | Rest Timer Capsule | Overload & E1RM PR | Calendar & Habit | Body Metric Trend |
+| Workout | Overload & Analytics | Calendar & Streak | Exercise Library | Body Metrics |
 | :---: | :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01_workout.png" width="160"/> | <img src="docs/screenshots/02_rest_timer.png" width="160"/> | <img src="docs/screenshots/03_analytics.png" width="160"/> | <img src="docs/screenshots/04_calendar.png" width="160"/> | <img src="docs/screenshots/05_body.png" width="160"/> |
-
-<br/>
-
-### 🎬 Quick Demo
-
-<img src="docs/demo.gif" width="360" alt="Rep Demo GIF"/>
+| <img src="docs/screenshots/01_workout.png" height="460"/> | <img src="docs/screenshots/02_analytics.png" height="460"/> | <img src="docs/screenshots/03_calendar.png" height="460"/> | <img src="docs/screenshots/04_library.png" height="460"/> | <img src="docs/screenshots/05_body.png" height="460"/> |
 
 </div>
 
