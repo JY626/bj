@@ -67,8 +67,9 @@ Zero external backend dependencies or API keys needed:
 - Completing a set smoothly floats a translucent blurred pill timer at the bottom.
 - Radial countdown ring with one-tap `+30s` extension and `Skip`, without blocking exercise library exploration.
 
-### 3. Progressive Overload Analytics & E1RM PRs
+### 3. Progressive Overload Analytics & Exercise PR Wall
 - **E1RM Curve**: Calculates Estimated 1RM using the classic Epley formula: $1\text{RM} = \text{Weight} \times (1 + \text{Reps} / 30)$, dynamically graphing breakthrough curves and PR badges.
+- **Exercise PR Wall**: Each exercise card highlights personal record badges. Tapping any movement reveals a dedicated PR Wall showcasing lifetime Estimated 1RM, max working weight, best volume set, and complete set timeline.
 - **RP Volume Landmarks**: Tracks weekly effective sets across Chest, Back, Legs, Shoulders, Arms, and Core against MEV, MAV, and MRV thresholds.
 - **Smart Double Progression**: Provides weight progression suggestions based on first-set targets (e.g., 60kg × 8 achieved → suggests 62.5kg × 6).
 
@@ -80,9 +81,13 @@ Zero external backend dependencies or API keys needed:
 - Records body weight, body fat %, chest, waist, and arm measurements.
 - Computes BMI and delta trends compared to your previous weigh-in.
 
-### 6. Health Connect Sync & AI Coach Integration (Muse)
-- **Automatic System Write**: Automatically records strength training sessions (`ExerciseSessionRecord`) and weight/body fat (`WeightRecord`, `BodyFatRecord`) into Android Health Connect on archive.
+### 6. Health Connect Bidirectional Sync & AI Ecosystem (Muse)
+- **Two-Way Health Connect Integration**: Automatically writes strength training sessions and weight/body fat into Android Health Connect; additionally supports **one-tap sync from Health Connect** to pull in smart scale and smartwatch weigh-ins seamlessly with deduplication.
 - **AI Coach Ready**: AI coaches (like Muse) can query training progress via standard Health Connect APIs in the background; also supports one-tap structured Markdown cards via Android Sharesheet.
+
+### 7. 100% Offline Data Backup & Restore
+- **Instant JSON Export**: Package all workout sessions, sets, custom exercise catalog, and body metrics into a standard dated JSON file via system Sharesheet to cloud drives, file managers, or chat apps.
+- **Lossless Restore**: Seamlessly recover your data when switching phones or reinstalling. Offers both smart "Merge Import" (recommended, deduplicating by timestamps) and "Overwrite Import".
 
 ---
 
@@ -92,9 +97,10 @@ Zero external backend dependencies or API keys needed:
 | :--- | :---: | :---: | :---: |
 | **Network** | 100% Offline | Requires internet, spins in gym basements | **100% Standalone Offline** |
 | **Privacy** | Prone to loss | Uploads data to remote servers for monetization | **Zero servers, 100% on device** |
+| **Data Backup** | Manual photos | Account-locked, hard to export | **One-tap JSON Export & Merge Restore** |
 | **Friction** | Manual handwriting | Heavy UI, ads, and community distractions | **Auto-inheritance + 48dp+ blind taps** |
-| **Scientific Overload** | None | Simple volume sum | **E1RM Curves + PRs + RP Thresholds** |
-| **Ecosystem** | None | Walled garden | **Health Connect + Structured Markdown** |
+| **Scientific Overload** | None | Simple volume sum | **E1RM Curves + PR Wall + RP Thresholds** |
+| **Ecosystem** | None | Walled garden | **Health Connect 2-Way + Markdown Export** |
 
 ---
 
@@ -109,7 +115,7 @@ Zero external backend dependencies or API keys needed:
 <details>
 <summary><b>Q2: Where is my training data stored? How do I backup?</b></summary>
 <br/>
-All data is stored inside Android's app sandbox (SQLite via Room) and the system's Health Connect storage. System cloud backup will preserve application data during device migration.
+All data is stored inside Android's app sandbox (SQLite via Room) and the system's Health Connect storage. Furthermore, Rep offers a robust <b>Data Backup & Restore</b> feature: export your full history to a standalone JSON file anytime in the Calendar tab, and restore it with one tap on a new device.
 </details>
 
 <details>
