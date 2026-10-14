@@ -1,40 +1,144 @@
+<div align="center">
+
 # Rep
 
-> 为薄肌训练设计的极简渐进式负荷健身记录 App
+**为薄肌训练设计的极简渐进式负荷健身记录 App**
 
-一款基于 **Kotlin + Jetpack Compose (Material 3)** 构建的现代化、**100% 离线单机**健身记录应用。
-专注于**极速训练记录、科学渐进式负荷量化与身体指标追踪**。界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
+[English](README_EN.md) | [简体中文](README.md)
+
+[![Release](https://img.shields.io/github/v/release/JY626/rep?color=00E676&label=Release&logo=github)](https://github.com/JY626/rep/releases/latest)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.11-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![MinSdk](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
+[![Health Connect](https://img.shields.io/badge/Health%20Connect-Supported-00E676?logo=googlefit&logoColor=white)](https://developer.android.com/health-and-fitness/guides/health-connect)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+<br/>
+
+一款基于 **Kotlin + Jetpack Compose (Material 3)** 构建的现代化、**100% 离线单机**健身记录应用。<br/>
+专注于**零延迟极速记录、双重渐进负荷量化与身体指标追踪**。<br/>
+界面遵循 **Apple Human Interface Guidelines (HIG)** 极简黑曜石设计，全界面采用 **Lucide 矢量线性图标**。
+
+<br/>
+
+### 📱 界面预览 (Screenshots)
+
+| 训练记录主屏 | 悬浮组间休息胶囊 | 渐进负荷 & E1RM PR | 每日日历 & 习惯 | 身体指标趋势 |
+| :---: | :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/01_workout.png" width="160"/> | <img src="docs/screenshots/02_rest_timer.png" width="160"/> | <img src="docs/screenshots/03_analytics.png" width="160"/> | <img src="docs/screenshots/04_calendar.png" width="160"/> | <img src="docs/screenshots/05_body.png" width="160"/> |
+
+<br/>
+
+### 🎬 快速演示 (Demo)
+
+<img src="docs/demo.gif" width="360" alt="Rep 操作演示"/>
+
+</div>
 
 ---
 
-## 一、 核心功能特色
+## ⚡️ 快速上手 (Getting Started)
 
-1. **零延迟极速记录 (Zero-Friction Logging)**：
-   * 开练时自动回填上周同动作记录（重量、次数）；打勾后下一未完成组自动继承本组重量次数，全程零键盘；
-   * 针对健身房疲劳场景的大触控区设计（48dp+）；
-   * 打勾即刻触发 Apple 质感震动反馈与实时容量（Volume kg）累加（热身组不计入容量）。
-2. **Apple Watch 风格悬浮组间休息胶囊 (Rest Timer Capsule)**：
-   * 打勾后自动在底部浮起半透明高斯模糊胶囊，环形进度条倒计时，支持一键 `+30s` 与 `跳过`，不阻碍浏览后续动作。
-3. **渐进式负荷量化 (Progressive Overload Analytics)**：
-   * **E1RM 极限拟合**：采用 Epley 经典公式 $1\text{RM} = \text{Weight} \times (1 + \text{Reps} / 30)$，以 Canvas 动态绘制力量突破曲线与 PR 标记；
-   * **RP 周期容量监控**：量化每周胸/背/腿/肩/臂/核心的有效组数，对照 MEV/MAV/MRV 科学阈值；一个动作同时给多个肌群计组（主动作 1.0 组 + 每个间接肌群 0.5 组，如高位下拉 = 背部 1 + 手臂 0.5）；
-   * **双重渐进协议**：基于前次首组真实数据纯次数判定加重节点（如 80kg x 8次达标 -> 建议首组冲击 82.5kg x 6次），实时显示在训练页顶部建议条。
-4. **每日记录日历与习惯追踪 (Calendar & Habits)**：
-   * 训练日打卡日历（推 / 拉 / 腿 快速辨识）；
-   * 连续训练天数（Streak）与周计划达成进度统计；
-   * 每日详情内直观查看当天完成组数、容量与当天的身体测量数据。
-5. **身体指标管理 (Body Metrics)**：
-   * 记录身高、体重、体脂率、胸围、腰围、臂围等身体指标；
-   * 自动计算 BMI 与相对上一次记录的增减变化趋势。
-6. **Health Connect 自动同步与 AI 数据生态 (Muse Sync)**：
-   * **系统健康底座写入**：训练归档后自动将力量训练、体重、体脂率写入 Android Health Connect，供外部 AI 教练（如 Muse）在后台无感直接读取；
-   * **一键分享给 AI**：一键生成规范 Markdown 结构化卡片（动作组智能折叠、环比与身体数据较上次增减），通过系统 Sharesheet 一键转发。
-7. **100% 离线优先架构 (Offline-First)**：
-   * 基于 Android Jetpack Room (SQLite) 本地数据库，无任何自建网络请求，健身房地下室弱网无痛运行，隐私数据 100% 本地存储。
+### 方式一：下载预编译 APK（推荐）
+直接在 GitHub Release 页面获取已签名的正式安装包：
+👉 **[下载最新版本 APK (v1.0.0)](https://github.com/JY626/rep/releases/latest)**
+
+### 方式二：从源码编译安装
+本项目无需配置任何外部 API Key 或自建后端，开箱即编：
+1. 克隆代码仓库：
+   ```bash
+   git clone https://github.com/JY626/rep.git
+   cd rep
+   ```
+2. 使用 Android Studio (Ladybug 2024.2+) 打开；
+3. 执行 Gradle 构建并直接安装至设备：
+   ```bash
+   ./gradlew assembleDebug
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
 
 ---
 
-## 二、 工程目录结构
+## 💎 核心功能特色 (Features)
+
+### 1. 零延迟极速记录 (Zero-Friction Logging)
+- **零键盘流式记录**：开练自动回填上次该动作的重量与次数；打勾某组后，下一组自动继承刚完成的数据，手抖疲劳时无需反复唤起软键盘。
+- **48dp+ 防误触大触控区**：针对力竭手抖场景深度优化，单手拇指即可极速完成打卡。
+- **严谨容量口径**：实时累加有效容量（Volume kg），严格自动排除热身组（`WARMUP`），避免虚高脏数据。
+
+### 2. Apple Watch 风格悬浮休息胶囊 (Rest Timer Capsule)
+- 打勾完成组后，底部自动平滑浮起半透明高斯模糊胶囊倒计时。
+- 环形进度条显示，支持一键 `+30s` 延长与 `跳过`，完全不遮挡继续浏览和编辑动作库。
+
+### 3. 渐进式负荷与 E1RM 力量拟合 (Progressive Overload Analytics)
+- **E1RM 极限拟合**：采用经典 Epley 公式 $1\text{RM} = \text{Weight} \times (1 + \text{Reps} / 30)$，以 Canvas 动态绘制力量增长轨迹，自动标出破纪录的 **PR 突破徽章**。
+- **RP 科学肌群容量监控**：按周统计胸、背、腿、肩、臂、核心各部位有效组数，实时对照 **MEV（维持量）**、**MAV（最佳适应量）** 与 **MRV（最大恢复量）** 阈值，提示部位训练是否欠缺或过度。
+- **智能双重渐进建议**：基于前次首组数据智能给出本周冲重指导（如 60kg × 8次达标 → 建议冲击 62.5kg × 6次）。
+
+### 4. 每日日历与连续训练追踪 (Calendar & Streak)
+- 直观查看每月训练打卡分布（推日 / 拉日 / 腿日 颜色速辨）。
+- 连续训练天数（Current Streak）与最长坚持天数统计，强化健身习惯。
+
+### 5. 身体指标量化 (Body Metrics)
+- 记录体重、体脂率、胸围、腰围、臂围等全维度形态指标。
+- 自动计算 BMI 并与上一次记录对比计算差值，趋势一目了然。
+
+### 6. Health Connect 自动写入与 AI 教练生态 (Muse Sync)
+- **系统底层自动写入**：训练归档后无感将力量训练记录（含起止时间、有效容量、各组明细）写入 Android 系统 Health Connect 底座；体重与体脂率保存后自动写入 Weight 与 BodyFat 记录。
+- **赋能外部 AI 教练**：外部 AI 助手（如 Muse）可直接通过系统权限在后台读取训练成果；同时支持在 App 内一键生成结构化 Markdown 卡片，通过系统 Sharesheet 快速转发。
+
+---
+
+## 📊 产品特性对比 (Comparison)
+
+| 特性维度 | 传统纸笔记录 | 商业臃肿健身 App | **Rep** |
+| :--- | :---: | :---: | :---: |
+| **网络要求** | 100% 离线 | 强依赖网络，地下室转圈 | **100% 离线单机运行** |
+| **隐私安全** | 容易丢失 | 用户数据上传云端服务器，有商业变现风险 | **零服务器，数据 100% 本地** |
+| **记录摩擦力** | 需手写笔算 | 步骤繁琐，广告弹窗与社区干扰 | **自动继承 + 48dp+ 盲打勾** |
+| **科学量化** | 无 | 多数仅做简单次数累加 | **E1RM 曲线 + PR 突破 + RP 阈值** |
+| **系统生态** | 无 | 封闭孤岛，无法导出 | **Health Connect + 结构化 Markdown** |
+
+---
+
+## ❓ 常见问题解答 (FAQ)
+
+<details>
+<summary><b>Q1: Rep 是否需要注册账号或联网使用？</b></summary>
+<br/>
+<b>答：完全不需要。</b> Rep 是一款纯粹的单机工具，没有注册登录界面，不设任何远程用户中心，100% 离线可用，在任何地下室或无网健身房中均能秒开使用。
+</details>
+
+<details>
+<summary><b>Q2: 我的训练记录保存在哪里？更换手机如何处理？</b></summary>
+<br/>
+<b>答：</b> 数据全部保存在 Android 设备的系统级安全沙盒（SQLite Room 数据库）以及系统的 Health Connect 中。如果你开启了 Android 系统云备份，换机时会自动迁移应用数据；同时训练明细已实时同步至系统的 Health Connect，支持系统级跨设备恢复。
+</details>
+
+<details>
+<summary><b>Q3: 热身组会影响我的总容量和 E1RM 计算吗？</b></summary>
+<br/>
+<b>答：不会。</b> 针对力量训练严谨度，Rep 的核心算法严格排除了标为热身组（WARMUP）的数据，仅正式组计入累计容量和肌群有效组数监控，保证训练数据 100% 具备科学参考价值。
+</details>
+
+<details>
+<summary><b>Q4: 如何授权 Health Connect 自动同步功能？</b></summary>
+<br/>
+<b>答：</b> 进入「日历」页面底部，即可看到「Health Connect 自动同步」卡片。如果尚未授权，点击「立即授权」并勾选写入运动、体重与体脂权限即可。若你的设备未安装 Health Connect 或版本过低，应用会自动优雅降级，完全不影响核心记录功能。
+</details>
+
+<details>
+<summary><b>Q5: 动作库支持自定义动作吗？</b></summary>
+<br/>
+<b>答：支持。</b> 进入「动作库」Tab，点击右上角加号即可快速创建个人自定义动作，支持选择目标肌群与器械类型，并在创建后自动纳入渐进负荷与 RP 容量统计。
+</details>
+
+---
+
+## 🛠 工程目录结构 (Architecture)
+
+<details>
+<summary><b>点击展开查看源码组织架构</b></summary>
 
 ```
 app/src/main/java/com/baoji/fitness/
@@ -62,16 +166,16 @@ app/src/main/java/com/baoji/fitness/
 └── MainActivity.kt            # 入口 Activity、边缘延展 (Edge-to-Edge) 与权限 Rationale
 ```
 
----
-
-## 三、 如何在 Android Studio 中打开与运行
-
-1. 打开 **Android Studio (Ladybug 2024.2 或更高版本)**；
-2. 选择 **Open**，直接选中本项目根目录；
-3. 等待 Gradle 同步完成后，点击运行按钮启动或安装至真机。
+</details>
 
 ---
 
-## 四、 开源协议
+## 🤝 参与贡献 (Contributing)
 
-本项目采用 [MIT License](LICENSE) 授权。
+欢迎提交 Issue 反馈 Bug 或发起 Pull Request！请参阅 [贡献指南](CONTRIBUTING.md) 了解环境配置与开发规范。
+
+---
+
+## 📄 开源协议 (License)
+
+本项目采用 [MIT License](LICENSE) 开源协议，欢迎自由学习与使用。
